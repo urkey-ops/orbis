@@ -792,7 +792,22 @@ function processFrame() {
         
         const decoded = decodeBitMatrix(sampled);
         
-        if (decoded.payload && decoded.confidence > 60) {
+        // Debug logging
+        if (decoded.confidence > 0) {
+          console.log(`[${versionName}] Attempt:`, {
+            payload: decoded.payload,
+            payloadLength: decoded.payload?.length || 0,
+            confidence: decoded.confidence,
+            version: decoded.version
+          });
+        }
+        
+        // STRICT: Must have valid payload with content
+        if (decoded.payload && 
+            decoded.payload.length > 0 && 
+            decoded.confidence >= 70 && 
+            decoded.payload.trim().length > 0) {
+          console.log('✓ Valid decode:', decoded.payload);
           showResult(decoded.payload, decoded.confidence, decoded.version);
           animFrame = requestAnimationFrame(processFrame);
           return;
@@ -832,11 +847,18 @@ function processImage(imageEl) {
         
         const decoded = decodeBitMatrix(sampled);
         
-        if (decoded.payload && decoded.confidence > 50) {
+        // STRICT: Must have valid payload
+        if (decoded.payload && 
+            decoded.payload.length > 0 && 
+            decoded.confidence >= 70 &&
+            decoded.payload.trim().length > 0) {
+          console.log('✓ Image decode success:', decoded.payload);
           showResult(decoded.payload, decoded.confidence, decoded.version);
           return;
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn('Decode attempt failed:', err);
+      }
     }
   }
   
