@@ -310,7 +310,7 @@
       <label class="field-label" for="url-input">URL or Text <span>*</span></label>
       <input class="url-input" id="url-input" type="text"
         placeholder="https://your-brand.com"
-        value="https://orbis.design">
+        value="orbis.design">
     </div>
 
     <div class="color-row">
@@ -333,9 +333,9 @@
     <div class="field-group">
       <div class="field-label">Version</div>
       <div class="ring-selector">
-        <button class="ring-btn active" data-version="lite">Lite<br><small>~32 B</small></button>
-        <button class="ring-btn" data-version="standard">Standard<br><small>~72 B</small></button>
-        <button class="ring-btn" data-version="pro">Pro<br><small>~128 B</small></button>
+        <button class="ring-btn active" data-version="lite">Lite<br><small>17 B</small></button>
+        <button class="ring-btn" data-version="standard">Standard<br><small>34 B</small></button>
+        <button class="ring-btn" data-version="pro">Pro<br><small>56 B</small></button>
       </div>
     </div>
 
@@ -390,9 +390,9 @@
 
 // ── Version configurations ─────────────────────────────────────────────────
 const VERSIONS = {
-  lite:     { rings: 8,  sMax: 24, sFloor: 8,  dataBytes: 32 },
-  standard: { rings: 12, sMax: 32, sFloor: 10, dataBytes: 72 },
-  pro:      { rings: 16, sMax: 40, sFloor: 12, dataBytes: 128 },
+  lite:     { rings: 10, sMax: 32, sFloor: 10, dataBytes: 17 },
+  standard: { rings: 16, sMax: 40, sFloor: 12, dataBytes: 34 },
+  pro:      { rings: 22, sMax: 48, sFloor: 14, dataBytes: 56 },
 };
 
 // ── Calculate sectors per ring ────────────────────────────────────────────
@@ -546,7 +546,7 @@ function extractVersion(matrix) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderORBIS({
-  payload = 'https://orbis.design',
+  payload = 'orbis.design',
   version  = 'lite',
   fg       = '#0a0a0f',
   bg       = '#f5f2eb',
@@ -696,7 +696,7 @@ let currentSvg     = '';
 
 function getInputs() {
   return {
-    payload  : document.getElementById('url-input').value.trim() || 'https://orbis.design',
+    payload  : document.getElementById('url-input').value.trim() || 'orbis.design',
     version  : currentVersion,
     fg       : document.getElementById('fg-color').value,
     bg       : document.getElementById('bg-color').value,
