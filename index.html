@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ORBIS — Circular Code Generator v2.0</title>
+<title>ORBIS — Circular Code Generator v3.0</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -18,6 +18,7 @@
     --border:  #d8d4c8;
     --warm:    #fff8f0;
     --scan:    #ff3b00;
+    --ok:      #00c853;
   }
 
   html, body {
@@ -63,8 +64,8 @@
     margin-left: auto;
     font-family: 'DM Mono', monospace;
     font-size: 0.7rem;
-    color: var(--accent);
-    border: 1px solid var(--accent);
+    color: var(--ok);
+    border: 1px solid var(--ok);
     padding: 0.25rem 0.6rem;
     border-radius: 2px;
     letter-spacing: 0.06em;
@@ -75,7 +76,7 @@
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
   }
 
   .field-group { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -103,42 +104,127 @@
   .url-input:focus { border-color: var(--accent); }
   .url-input::placeholder { color: var(--muted); }
 
-  .color-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  .color-field { display: flex; flex-direction: column; gap: 0.4rem; }
-  .color-swatch-wrap {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
+  /* Capacity bar */
+  .capacity-indicator {
     background: white;
     border: 1.5px solid var(--border);
     border-radius: 4px;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
-  .color-swatch-wrap input[type=color] {
-    width: 28px; height: 28px;
-    border: none; background: none; cursor: pointer; padding: 0;
-    border-radius: 3px; overflow: hidden;
-  }
-  .color-hex {
+  .capacity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-family: 'DM Mono', monospace;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+  }
+  .capacity-used {
     color: var(--ink);
+    font-weight: 600;
+  }
+  .capacity-auto-badge {
+    background: var(--accent);
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+  }
+  .capacity-bar-track {
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .capacity-bar-fill {
+    height: 100%;
+    background: var(--ok);
+    border-radius: 4px;
+    transition: width 0.3s, background 0.3s;
+  }
+  .capacity-bar-fill.warning { background: #ff9800; }
+  .capacity-bar-fill.error { background: var(--scan); }
+
+  /* Color presets */
+  .color-presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+  }
+  .color-preset {
+    aspect-ratio: 1;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .color-preset:hover {
+    transform: scale(1.05);
+    border-color: var(--accent);
+  }
+  .color-preset.active {
+    border-color: var(--accent);
+    border-width: 3px;
+  }
+  .color-preset-inner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+  }
+  .color-preset-fg {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+  }
+  .color-preset-bg {
+    flex: 1;
   }
 
-  .ring-selector { display: flex; gap: 0.5rem; }
+  .advanced-toggle {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    text-align: left;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .advanced-toggle:hover { color: var(--accent); }
+
+  .advanced-section {
+    display: none;
+    animation: slideDown 0.3s;
+  }
+  .advanced-section.visible { display: block; }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .ring-selector { 
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.4rem;
+  }
   .ring-btn {
-    flex: 1;
-    padding: 0.6rem;
+    padding: 0.5rem 0.3rem;
     background: white;
     border: 1.5px solid var(--border);
     border-radius: 4px;
     font-family: 'DM Sans', sans-serif;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     font-weight: 500;
     color: var(--muted);
     cursor: pointer;
@@ -152,12 +238,8 @@
     color: white;
   }
 
-  .logo-input-wrap {
-    display: flex;
-    gap: 0.5rem;
-  }
   .logo-input {
-    flex: 1;
+    width: 100%;
     background: white;
     border: 1.5px solid var(--border);
     border-radius: 4px;
@@ -186,6 +268,11 @@
   }
   .gen-btn:hover { background: var(--accent); }
   .gen-btn:active { transform: scale(0.99); }
+  .gen-btn:disabled {
+    background: var(--muted);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 
   .dl-row { display: flex; gap: 0.75rem; }
   .dl-btn {
@@ -205,7 +292,7 @@
   }
   .dl-btn:hover { border-color: var(--ink); }
 
-  .payload-info {
+  .info-box {
     padding: 0.75rem 1rem;
     background: var(--warm);
     border: 1px solid var(--border);
@@ -215,7 +302,12 @@
     color: var(--muted);
     line-height: 1.8;
   }
-  .payload-info strong { color: var(--ink); }
+  .info-box strong { color: var(--ink); }
+  .info-box.success {
+    background: rgba(0, 200, 83, 0.08);
+    border-color: rgba(0, 200, 83, 0.25);
+    color: var(--ok);
+  }
 
   .panel-right {
     padding: 2.5rem 3rem;
@@ -300,8 +392,8 @@
 
   <header>
     <div class="logo-word"><em>O</em>RBIS</div>
-    <div class="tagline">Circular data code v2.0</div>
-    <div class="version-badge">WORKING</div>
+    <div class="tagline">Smart circular codes v3.0</div>
+    <div class="version-badge">AUTO</div>
   </header>
 
   <div class="panel-left">
@@ -309,41 +401,68 @@
     <div class="field-group">
       <label class="field-label" for="url-input">URL or Text <span>*</span></label>
       <input class="url-input" id="url-input" type="text"
-        placeholder="https://your-brand.com"
+        placeholder="Enter text or URL..."
         value="orbis.design">
     </div>
 
-    <div class="color-row">
-      <div class="color-field">
-        <div class="field-label">Code colour</div>
-        <div class="color-swatch-wrap">
-          <input type="color" id="fg-color" value="#0a0a0f">
-          <span class="color-hex" id="fg-hex">#0a0a0f</span>
-        </div>
+    <div class="capacity-indicator">
+      <div class="capacity-header">
+        <span class="capacity-used" id="capacity-text">12 / 15 bytes</span>
+        <span class="capacity-auto-badge" id="auto-badge">AUTO: LITE</span>
       </div>
-      <div class="color-field">
-        <div class="field-label">Background</div>
-        <div class="color-swatch-wrap">
-          <input type="color" id="bg-color" value="#f5f2eb">
-          <span class="color-hex" id="bg-hex">#f5f2eb</span>
-        </div>
+      <div class="capacity-bar-track">
+        <div class="capacity-bar-fill" id="capacity-bar" style="width: 80%"></div>
       </div>
     </div>
 
     <div class="field-group">
-      <div class="field-label">Version</div>
-      <div class="ring-selector">
-        <button class="ring-btn active" data-version="lite">Lite<br><small>17 B</small></button>
-        <button class="ring-btn" data-version="standard">Standard<br><small>34 B</small></button>
-        <button class="ring-btn" data-version="pro">Pro<br><small>56 B</small></button>
+      <div class="field-label">Color Style</div>
+      <div class="color-presets">
+        <div class="color-preset active" data-fg="#0a0a0f" data-bg="#f5f2eb" title="Classic (Black on Cream)">
+          <div class="color-preset-inner">
+            <div class="color-preset-fg" style="background: #f5f2eb; color: #0a0a0f;">◎</div>
+            <div class="color-preset-bg" style="background: #0a0a0f;"></div>
+          </div>
+        </div>
+        <div class="color-preset" data-fg="#1a1aff" data-bg="#ffffff" title="Blue (High Contrast)">
+          <div class="color-preset-inner">
+            <div class="color-preset-fg" style="background: #ffffff; color: #1a1aff;">◎</div>
+            <div class="color-preset-bg" style="background: #1a1aff;"></div>
+          </div>
+        </div>
+        <div class="color-preset" data-fg="#000000" data-bg="#ffffff" title="Pure (Black & White)">
+          <div class="color-preset-inner">
+            <div class="color-preset-fg" style="background: #ffffff; color: #000000;">◎</div>
+            <div class="color-preset-bg" style="background: #000000;"></div>
+          </div>
+        </div>
+        <div class="color-preset" data-fg="#00c853" data-bg="#0a0a0f" title="Tech (Green on Dark)">
+          <div class="color-preset-inner">
+            <div class="color-preset-fg" style="background: #0a0a0f; color: #00c853;">◎</div>
+            <div class="color-preset-bg" style="background: #00c853;"></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="field-group">
-      <label class="field-label" for="logo-input">Centre text / brand initial</label>
-      <div class="logo-input-wrap">
+    <button class="advanced-toggle" id="advanced-toggle">▼ Advanced Options</button>
+
+    <div class="advanced-section" id="advanced-section">
+      <div class="field-group">
+        <div class="field-label">Manual Version Override</div>
+        <div class="ring-selector">
+          <button class="ring-btn" data-version="lite">Lite<br><small>17B</small></button>
+          <button class="ring-btn" data-version="standard">Std<br><small>34B</small></button>
+          <button class="ring-btn" data-version="pro">Pro<br><small>56B</small></button>
+          <button class="ring-btn" data-version="ultra">Ultra<br><small>83B</small></button>
+          <button class="ring-btn" data-version="mega">Mega<br><small>117B</small></button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="logo-input">Centre Logo (1-3 chars)</label>
         <input class="logo-input" id="logo-input" type="text" maxlength="3"
-          placeholder="A" value="◎">
+          placeholder="◎" value="◎">
       </div>
     </div>
 
@@ -354,11 +473,14 @@
       <a class="dl-btn" id="dl-png" href="#" download="orbis.png">↓ PNG</a>
     </div>
 
-    <div class="payload-info" id="payload-info">
-      Enter a URL and click Generate.
+    <div class="info-box success">
+      <strong>✓ Smart Features Active</strong><br>
+      • Auto version selection<br>
+      • High contrast enforced<br>
+      • White border included
     </div>
 
-    <a href="orbis-scanner-v2.html" style="display:block;width:100%;padding:0.7rem;text-align:center;border:1.5px solid var(--border);border-radius:4px;font-family:'DM Mono',monospace;font-size:0.8rem;color:var(--ink);text-decoration:none;background:white;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink)'">&#9678; Open Scanner &rarr;</a>
+    <a href="orbis-scanner-v3.html" style="display:block;width:100%;padding:0.7rem;text-align:center;border:1.5px solid var(--border);border-radius:4px;font-family:'DM Mono',monospace;font-size:0.8rem;color:var(--ink);text-decoration:none;background:white;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink)'">&#9678; Open Scanner &rarr;</a>
 
   </div>
 
@@ -376,43 +498,71 @@
   </div>
 
   <footer>
-    <span class="footer-note">ORBIS v2.0 — Real data encoding · Works like QR codes</span>
-    <a class="footer-link" href="#" target="_blank">Universal decoding</a>
+    <span class="footer-note">ORBIS v3.0 — Auto-optimized · Smart defaults · Universal scanning</span>
+    <a class="footer-link" href="#" target="_blank">github.com/orbis-code</a>
   </footer>
 
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-//  ORBIS ENCODER V2.0 — REAL DATA ENCODING
-//  Now actually encodes data into the pattern (like QR codes)
+//  ORBIS GENERATOR V3.0 — Smart Defaults & Auto-Optimization
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── Version configurations ─────────────────────────────────────────────────
 const VERSIONS = {
   lite:     { rings: 10, sMax: 32, sFloor: 10, dataBytes: 17 },
   standard: { rings: 16, sMax: 40, sFloor: 12, dataBytes: 34 },
   pro:      { rings: 22, sMax: 48, sFloor: 14, dataBytes: 56 },
+  ultra:    { rings: 28, sMax: 56, sFloor: 16, dataBytes: 83 },
+  mega:     { rings: 35, sMax: 64, sFloor: 18, dataBytes: 117 },
 };
 
-// ── Calculate sectors per ring ────────────────────────────────────────────
 function sectorCount(r, rMax, sMax, sFloor) {
   return Math.max(sFloor, Math.round(sMax * r / rMax));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  SIMPLE ERROR CORRECTION — Reed-Solomon inspired
-//  Uses XOR-based redundancy for demonstration
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Auto version selection ─────────────────────────────────────────────────
+function autoSelectVersion(payload) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(payload).length;
+  
+  for (const [name, cfg] of Object.entries(VERSIONS)) {
+    if (bytes <= cfg.dataBytes - 2) {
+      return name;
+    }
+  }
+  return 'mega'; // fallback
+}
 
+// ── Contrast checker ───────────────────────────────────────────────────────
+function getLuminance(hex) {
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 0xff;
+  const g = (rgb >> 8) & 0xff;
+  const b = rgb & 0xff;
+  
+  const [rs, gs, bs] = [r, g, b].map(c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function getContrastRatio(hex1, hex2) {
+  const l1 = getLuminance(hex1);
+  const l2 = getLuminance(hex2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+// ── Error correction ───────────────────────────────────────────────────────
 function addErrorCorrection(dataBytes, ecLevel = 0.3) {
   const ecBytes = Math.ceil(dataBytes.length * ecLevel);
   const result = new Uint8Array(dataBytes.length + ecBytes);
-  
-  // Copy data
   result.set(dataBytes, 0);
   
-  // Simple XOR-based EC (real QR uses Reed-Solomon)
   for (let i = 0; i < ecBytes; i++) {
     let ec = 0;
     for (let j = 0; j < dataBytes.length; j++) {
@@ -424,30 +574,7 @@ function addErrorCorrection(dataBytes, ecLevel = 0.3) {
   return result;
 }
 
-function correctErrors(receivedBytes, dataLen, ecLen) {
-  // Simple error detection and correction
-  const data = receivedBytes.slice(0, dataLen);
-  const ec = receivedBytes.slice(dataLen);
-  
-  // Verify EC codes
-  let errors = 0;
-  for (let i = 0; i < ecLen; i++) {
-    let expected = 0;
-    for (let j = 0; j < dataLen; j++) {
-      expected ^= data[j] * (i + j + 1);
-    }
-    if ((expected & 0xFF) !== ec[i]) {
-      errors++;
-    }
-  }
-  
-  return { data, errors, correctable: errors < ecLen / 2 };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  DATA ENCODING — Convert string to bytes with length prefix
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── Data encoding ──────────────────────────────────────────────────────────
 function encodePayload(payload, maxBytes) {
   const encoder = new TextEncoder();
   const utf8 = encoder.encode(payload);
@@ -456,45 +583,23 @@ function encodePayload(payload, maxBytes) {
     throw new Error(`Payload too long: ${utf8.length} bytes (max ${maxBytes - 2})`);
   }
   
-  // Format: [length_high, length_low, ...data, padding...]
   const result = new Uint8Array(maxBytes);
-  result[0] = (utf8.length >> 8) & 0xFF;  // Length high byte
-  result[1] = utf8.length & 0xFF;          // Length low byte
+  result[0] = (utf8.length >> 8) & 0xFF;
+  result[1] = utf8.length & 0xFF;
   result.set(utf8, 2);
   
-  // Fill rest with padding pattern
   for (let i = 2 + utf8.length; i < maxBytes; i++) {
-    result[i] = (i % 2 === 0) ? 0xEC : 0x11; // Standard QR padding pattern
+    result[i] = (i % 2 === 0) ? 0xEC : 0x11;
   }
   
   return result;
 }
 
-function decodePayload(dataBytes) {
-  if (dataBytes.length < 2) return null;
-  
-  const length = (dataBytes[0] << 8) | dataBytes[1];
-  if (length > dataBytes.length - 2) return null;
-  
-  const payload = dataBytes.slice(2, 2 + length);
-  const decoder = new TextDecoder();
-  
-  try {
-    return decoder.decode(payload);
-  } catch {
-    return null;
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  BIT MATRIX BUILDER — Convert bytes to 2D ring/sector matrix
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── Bit matrix builder ─────────────────────────────────────────────────────
 function buildBitMatrix(encodedBytes, version) {
   const cfg = VERSIONS[version];
   const { sMax, rings, sFloor } = cfg;
   
-  // Convert bytes to bits
   const bits = [];
   for (const byte of encodedBytes) {
     for (let i = 7; i >= 0; i--) {
@@ -502,7 +607,6 @@ function buildBitMatrix(encodedBytes, version) {
     }
   }
   
-  // Calculate total cells
   let totalCells = 0;
   const ringCells = [];
   for (let r = 1; r <= rings; r++) {
@@ -511,16 +615,19 @@ function buildBitMatrix(encodedBytes, version) {
     totalCells += s;
   }
   
-  // Add version marker in first 4 bits
-  const versionMarker = { lite: 0b00, standard: 0b01, pro: 0b10 }[version];
+  const versionMarker = { lite: 0b00, standard: 0b01, pro: 0b10, ultra: 0b11, mega: 0b11 }[version];
   bits.unshift((versionMarker >> 1) & 1, versionMarker & 1);
   
-  // Pad if needed
+  if (version === 'mega') {
+    bits.unshift(1);
+  } else {
+    bits.unshift(0);
+  }
+  
   while (bits.length < totalCells) {
     bits.push(bits.length % 2);
   }
   
-  // Build matrix
   const matrix = [];
   let idx = 0;
   for (let r = 0; r < rings; r++) {
@@ -534,17 +641,7 @@ function buildBitMatrix(encodedBytes, version) {
   return matrix;
 }
 
-// Extract version from first 2 bits of matrix
-function extractVersion(matrix) {
-  if (!matrix[0] || matrix[0].length < 2) return 'lite';
-  const marker = (matrix[0][0] << 1) | matrix[0][1];
-  return ['lite', 'standard', 'pro'][marker] || 'lite';
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  SVG RENDERER
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── SVG Renderer with WHITE BORDER ─────────────────────────────────────────
 function renderORBIS({
   payload = 'orbis.design',
   version  = 'lite',
@@ -554,17 +651,15 @@ function renderORBIS({
   size     = 400,
 }) {
   const cfg = VERSIONS[version];
-  const { sMax, rings, sFloor, dataBytes } = cfg;
+  const { sMax, rings, sFloor } = cfg;
   
-  // Encode the payload
-  const encoded = encodePayload(payload, dataBytes);
+  const encoded = encodePayload(payload, cfg.dataBytes);
   const withEC = addErrorCorrection(encoded, 0.3);
   const matrix = buildBitMatrix(withEC, version);
   
   const cx = size / 2, cy = size / 2;
-  const R  = size / 2 - 4;
+  const R  = size / 2 - 20; // EXTRA PADDING for white border
   
-  // Layer radii
   const logoR     = R * 0.18;
   const identityR = R * 0.25;
   const dataInR   = R * 0.25;
@@ -578,10 +673,13 @@ function renderORBIS({
   
   let paths = '';
   
+  // WHITE BORDER/PADDING (safety margin)
+  paths += `<circle cx="${cx}" cy="${cy}" r="${R + 18}" fill="white"/>`;
+  
   // Background
   paths += `<circle cx="${cx}" cy="${cy}" r="${R + 2}" fill="${bg}"/>`;
   
-  // L5 — Outer Scan Ring (orientation markers)
+  // L5 — Outer Scan Ring
   const L5_SEGMENTS = 48;
   for (let i = 0; i < L5_SEGMENTS; i++) {
     const startAngle = (i / L5_SEGMENTS) * 2 * Math.PI - Math.PI / 2;
@@ -591,7 +689,6 @@ function renderORBIS({
     paths += `<path d="${path}" fill="${fg}" opacity="${opacity}"/>`;
   }
   
-  // Three rotation anchors at 0°, 120°, 240°
   [0, 120, 240].forEach(deg => {
     const baseRad = (deg - 90) * Math.PI / 180;
     const arcSpan = (3.5 / L5_SEGMENTS) * 2 * Math.PI;
@@ -600,7 +697,7 @@ function renderORBIS({
     paths += `<path d="${annularArc(cx, cy, scanInR - 3, scanOutR + 2, a1, a2)}" fill="${fg}"/>`;
   });
   
-  // L4 — Error Correction visual indicator
+  // L4 — Error Correction
   const EC_DOTS = 60;
   for (let i = 0; i < EC_DOTS; i++) {
     const angle = (i / EC_DOTS) * 2 * Math.PI - Math.PI / 2;
@@ -611,7 +708,7 @@ function renderORBIS({
     paths += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${sz}" fill="${fg}" opacity="${i%4===0?0.8:0.4}"/>`;
   }
   
-  // L3 — Primary Data Rings (THE ACTUAL ENCODED DATA)
+  // L3 — Primary Data Rings
   for (let r = 0; r < rings; r++) {
     const innerR = dataInR + r * ringW;
     const outerR = dataInR + (r + 1) * ringW - 0.8;
@@ -620,7 +717,7 @@ function renderORBIS({
     const angleStep = (2 * Math.PI) / numSectors;
     
     for (let s = 0; s < numSectors; s++) {
-      if (rowBits[s] === 0) continue; // bit 0 = no arc
+      if (rowBits[s] === 0) continue;
       const startAngle = s * angleStep - Math.PI / 2;
       const endAngle   = (s + 1) * angleStep - Math.PI / 2 - 0.015;
       const path = annularArc(cx, cy, innerR, outerR, startAngle, endAngle);
@@ -647,13 +744,12 @@ function renderORBIS({
     font-size="${logoFontSize.toFixed(1)}"
     fill="${fg}">${escapeXml(logoText)}</text>`;
   
-  // Outer boundary
   paths += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${fg}" stroke-width="1.5" opacity="0.5"/>`;
   
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
   <defs>
     <clipPath id="circle-clip">
-      <circle cx="${cx}" cy="${cy}" r="${R + 1}"/>
+      <circle cx="${cx}" cy="${cy}" r="${R + 20}"/>
     </clipPath>
   </defs>
   <g clip-path="url(#circle-clip)">
@@ -691,34 +787,51 @@ function escapeXml(s) {
 //  UI CONTROLLER
 // ═══════════════════════════════════════════════════════════════════════════
 
-let currentVersion = 'lite';
-let currentSvg     = '';
+let currentSvg = '';
+let currentFg = '#0a0a0f';
+let currentBg = '#f5f2eb';
+let manualVersion = null;
 
 function getInputs() {
+  const payload = document.getElementById('url-input').value.trim() || 'orbis.design';
+  const version = manualVersion || autoSelectVersion(payload);
+  
   return {
-    payload  : document.getElementById('url-input').value.trim() || 'orbis.design',
-    version  : currentVersion,
-    fg       : document.getElementById('fg-color').value,
-    bg       : document.getElementById('bg-color').value,
-    logoText : document.getElementById('logo-input').value.trim() || '◎',
-    size     : 400,
+    payload,
+    version,
+    fg: currentFg,
+    bg: currentBg,
+    logoText: document.getElementById('logo-input').value.trim() || '◎',
+    size: 400,
   };
 }
 
-function updatePayloadInfo(inputs) {
-  const cfg = VERSIONS[inputs.version];
+function updateCapacityIndicator() {
+  const payload = document.getElementById('url-input').value.trim() || '';
   const encoder = new TextEncoder();
-  const rawBytes = encoder.encode(inputs.payload).length;
-  const maxData = cfg.dataBytes - 2; // minus length prefix
+  const bytes = encoder.encode(payload).length;
   
-  const fits = rawBytes <= maxData;
-  const pctUsed = Math.min(100, Math.round((rawBytes / maxData) * 100));
+  const version = manualVersion || autoSelectVersion(payload);
+  const cfg = VERSIONS[version];
+  const maxBytes = cfg.dataBytes - 2;
   
-  document.getElementById('payload-info').innerHTML =
-    `<strong>Payload:</strong> ${rawBytes} bytes<br>` +
-    `<strong>Capacity:</strong> ${maxData} bytes (${cfg.dataBytes} total, 30% EC)<br>` +
-    `<strong>Usage:</strong> ${pctUsed}% ${!fits ? '<span style="color:var(--scan)">⚠ Too large — upgrade version</span>' : pctUsed > 85 ? '⚡ Almost full' : '✓ Fits perfectly'}<br>` +
-    `<strong>Status:</strong> Real data encoding enabled ✓`;
+  const percentage = Math.min(100, (bytes / maxBytes) * 100);
+  
+  document.getElementById('capacity-text').textContent = `${bytes} / ${maxBytes} bytes`;
+  document.getElementById('auto-badge').textContent = manualVersion ? `MANUAL: ${version.toUpperCase()}` : `AUTO: ${version.toUpperCase()}`;
+  
+  const bar = document.getElementById('capacity-bar');
+  bar.style.width = percentage + '%';
+  bar.className = 'capacity-bar-fill';
+  
+  if (percentage > 100) {
+    bar.classList.add('error');
+  } else if (percentage > 85) {
+    bar.classList.add('warning');
+  }
+  
+  // Update generate button
+  document.getElementById('gen-btn').disabled = bytes > maxBytes;
 }
 
 function generate() {
@@ -728,55 +841,109 @@ function generate() {
     currentSvg = renderORBIS(inputs);
     const canvas = document.getElementById('orbis-canvas');
     canvas.innerHTML = currentSvg;
-    updatePayloadInfo(inputs);
-    updateDownloads();
+    updateDownloads(inputs.payload);
   } catch (err) {
-    alert(err.message);
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(inputs.payload).length;
+    const cfg = VERSIONS[inputs.version];
+    const maxAllowed = cfg.dataBytes - 2;
+    
+    alert(`❌ ${err.message}\n\nYour text: "${inputs.payload}"\nSize: ${bytes} bytes\nMax allowed: ${maxAllowed} bytes\n\n💡 Try a shorter version or upgrade to a bigger size.`);
   }
 }
 
-function updateDownloads() {
-  const svgBlob = new Blob([currentSvg], { type: 'image/svg+xml' });
-  const svgUrl  = URL.createObjectURL(svgBlob);
-  document.getElementById('dl-svg').href = svgUrl;
+function updateDownloads(payload) {
+  // Smart filename
+  let filename = 'orbis';
+  if (payload) {
+    const slug = payload
+      .replace(/^https?:\/\//, '')
+      .replace(/[^a-z0-9]/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 30);
+    filename = 'orbis-' + (slug || 'code');
+  }
   
-  const svgEl  = document.getElementById('orbis-canvas').querySelector('svg');
+  const svgBlob = new Blob([currentSvg], { type: 'image/svg+xml' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  const dlSvg = document.getElementById('dl-svg');
+  dlSvg.href = svgUrl;
+  dlSvg.download = filename + '.svg';
+  
+  const svgEl = document.getElementById('orbis-canvas').querySelector('svg');
   const canvas = document.createElement('canvas');
-  canvas.width  = 800;
+  canvas.width = 800;
   canvas.height = 800;
   const ctx = canvas.getContext('2d');
   const img = new Image();
   const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
   img.onload = () => {
     ctx.drawImage(img, 0, 0, 800, 800);
     URL.revokeObjectURL(url);
-    document.getElementById('dl-png').href = canvas.toDataURL('image/png');
+    const dlPng = document.getElementById('dl-png');
+    dlPng.href = canvas.toDataURL('image/png');
+    dlPng.download = filename + '.png';
   };
   img.src = url;
 }
 
+// ── Event bindings ─────────────────────────────────────────────────────────
 document.getElementById('gen-btn').addEventListener('click', generate);
 
-['fg','bg'].forEach(id => {
-  const picker = document.getElementById(id + '-color');
-  const hex    = document.getElementById(id + '-hex');
-  picker.addEventListener('input', () => { hex.textContent = picker.value; });
-});
-
-document.querySelectorAll('.ring-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.ring-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentVersion = btn.dataset.version;
-  });
+document.getElementById('url-input').addEventListener('input', () => {
+  updateCapacityIndicator();
+  // Live preview with debounce
+  clearTimeout(window.livePreviewTimeout);
+  window.livePreviewTimeout = setTimeout(generate, 500);
 });
 
 document.getElementById('url-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') generate();
 });
 
-window.addEventListener('load', generate);
+// Color presets
+document.querySelectorAll('.color-preset').forEach(preset => {
+  preset.addEventListener('click', () => {
+    document.querySelectorAll('.color-preset').forEach(p => p.classList.remove('active'));
+    preset.classList.add('active');
+    
+    currentFg = preset.dataset.fg;
+    currentBg = preset.dataset.bg;
+    
+    generate();
+  });
+});
+
+// Advanced toggle
+document.getElementById('advanced-toggle').addEventListener('click', () => {
+  const section = document.getElementById('advanced-section');
+  const toggle = document.getElementById('advanced-toggle');
+  
+  if (section.classList.contains('visible')) {
+    section.classList.remove('visible');
+    toggle.textContent = '▼ Advanced Options';
+  } else {
+    section.classList.add('visible');
+    toggle.textContent = '▲ Advanced Options';
+  }
+});
+
+// Manual version override
+document.querySelectorAll('.ring-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.ring-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    manualVersion = btn.dataset.version;
+    updateCapacityIndicator();
+  });
+});
+
+window.addEventListener('load', () => {
+  updateCapacityIndicator();
+  generate();
+});
 </script>
 </body>
 </html>
