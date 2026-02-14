@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBIS — Circular Code Generator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:     #0a0a0f;
+    --paper:   #f5f2eb;
+    --accent:  #1a1aff;
+    --mid:     #3d3d8a;
+    --muted:   #8a8a9a;
+    --border:  #d8d4c8;
+    --warm:    #fff8f0;
+    --scan:    #ff3b00;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 400;
+  }
+
+  /* ── layout ── */
+  .shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  /* ── header ── */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    padding: 2rem 3rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-word {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2.2rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .logo-word em { color: var(--accent); font-style: italic; }
+  .tagline {
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+    padding-top: 0.15rem;
+  }
+  .version-badge {
+    margin-left: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0.25rem 0.6rem;
+    border-radius: 2px;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── left panel — controls ── */
+  .panel-left {
+    padding: 2.5rem 3rem;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 0.5rem; }
+  .field-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .field-label span { color: var(--scan); }
+
+  .url-input {
+    width: 100%;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 0.85rem 1rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .url-input:focus { border-color: var(--accent); }
+  .url-input::placeholder { color: var(--muted); }
+
+  /* colour picker row */
+  .color-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .color-field { display: flex; flex-direction: column; gap: 0.4rem; }
+  .color-swatch-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+  }
+  .color-swatch-wrap input[type=color] {
+    width: 28px; height: 28px;
+    border: none; background: none; cursor: pointer; padding: 0;
+    border-radius: 3px; overflow: hidden;
+  }
+  .color-hex {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--ink);
+  }
+
+  /* ring selector */
+  .ring-selector { display: flex; gap: 0.5rem; }
+  .ring-btn {
+    flex: 1;
+    padding: 0.6rem;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .ring-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ring-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  /* logo text */
+  .logo-input-wrap {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .logo-input {
+    flex: 1;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 0.7rem 0.9rem;
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.1rem;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .logo-input:focus { border-color: var(--accent); }
+
+  /* generate button */
+  .gen-btn {
+    width: 100%;
+    padding: 1rem;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .gen-btn:hover { background: var(--accent); }
+  .gen-btn:active { transform: scale(0.99); }
+
+  /* download row */
+  .dl-row { display: flex; gap: 0.75rem; }
+  .dl-btn {
+    flex: 1;
+    padding: 0.65rem;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    text-decoration: none;
+    display: block;
+  }
+  .dl-btn:hover { border-color: var(--ink); }
+
+  /* payload info */
+  .payload-info {
+    padding: 0.75rem 1rem;
+    background: var(--warm);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+  .payload-info strong { color: var(--ink); }
+
+  /* ── right panel — preview ── */
+  .panel-right {
+    padding: 2.5rem 3rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    background: white;
+  }
+
+  .orbis-canvas {
+    width: 340px;
+    height: 340px;
+    position: relative;
+  }
+  .orbis-canvas svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 8px 32px rgba(0,0,0,0.12));
+    border-radius: 50%;
+    overflow: visible;
+  }
+
+  .scan-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .scan-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--scan); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+
+  /* empty state */
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+  }
+  .empty-state p { font-size: 0.85rem; line-height: 1.6; }
+
+  /* ── footer ── */
+  footer {
+    grid-column: 1 / -1;
+    padding: 1rem 3rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-note {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+  .footer-link {
+    font-size: 0.72rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── mobile ── */
+  @media (max-width: 720px) {
+    .shell { grid-template-columns: 1fr; }
+    .panel-left { border-right: none; border-bottom: 1px solid var(--border); padding: 1.5rem; }
+    .panel-right { padding: 2rem 1.5rem; }
+    header { padding: 1.5rem; flex-wrap: wrap; }
+    footer { flex-direction: column; gap: 0.5rem; text-align: center; }
+    .orbis-canvas { width: 280px; height: 280px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-word"><em>O</em>RBIS</div>
+    <div class="tagline">Circular branded code</div>
+    <div class="version-badge">v0.3</div>
+  </header>
+
+  <!-- LEFT PANEL -->
+  <div class="panel-left">
+
+    <div class="field-group">
+      <label class="field-label" for="url-input">URL or Text <span>*</span></label>
+      <input class="url-input" id="url-input" type="text"
+        placeholder="https://your-brand.com"
+        value="https://orbis.design">
+    </div>
+
+    <div class="color-row">
+      <div class="color-field">
+        <div class="field-label">Code colour</div>
+        <div class="color-swatch-wrap">
+          <input type="color" id="fg-color" value="#0a0a0f">
+          <span class="color-hex" id="fg-hex">#0a0a0f</span>
+        </div>
+      </div>
+      <div class="color-field">
+        <div class="field-label">Background</div>
+        <div class="color-swatch-wrap">
+          <input type="color" id="bg-color" value="#f5f2eb">
+          <span class="color-hex" id="bg-hex">#f5f2eb</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Version</div>
+      <div class="ring-selector">
+        <button class="ring-btn active" data-version="lite">Lite<br><small>~16 B</small></button>
+        <button class="ring-btn" data-version="standard">Standard<br><small>~39 B</small></button>
+        <button class="ring-btn" data-version="pro">Pro<br><small>~72 B</small></button>
+        <button class="ring-btn" data-version="ultra">Ultra<br><small>~123 B</small></button>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label" for="logo-input">Centre text / brand initial</label>
+      <div class="logo-input-wrap">
+        <input class="logo-input" id="logo-input" type="text" maxlength="3"
+          placeholder="A" value="◎">
+      </div>
+    </div>
+
+    <button class="gen-btn" id="gen-btn">Generate ORBIS</button>
+
+    <div class="dl-row">
+      <a class="dl-btn" id="dl-svg" href="#" download="orbis.svg">↓ SVG</a>
+      <a class="dl-btn" id="dl-png" href="#" download="orbis.png">↓ PNG</a>
+    </div>
+
+    <div class="payload-info" id="payload-info">
+      Enter a URL and click Generate.
+    </div>
+
+    <div class="payload-info" id="reg-status" style="color:var(--muted)">
+      Not yet registered &mdash; click Generate first
+    </div>
+
+    <a href="orbis-scanner.html" style="display:block;width:100%;padding:0.7rem;text-align:center;border:1.5px solid var(--border);border-radius:4px;font-family:'DM Mono',monospace;font-size:0.8rem;color:var(--ink);text-decoration:none;background:white;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink)'">&#9678; Open Scanner &rarr;</a>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel-right">
+    <div class="orbis-canvas" id="orbis-canvas">
+      <div class="empty-state">
+        <div class="empty-icon">◎</div>
+        <p>Your ORBIS code<br>will appear here</p>
+      </div>
+    </div>
+    <div class="scan-label">
+      <div class="scan-dot"></div>
+      Point camera here to scan
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <span class="footer-note">ORBIS v0.3 — open specification · polar-coordinate visual code</span>
+    <a class="footer-link" href="https://github.com" target="_blank">github.com/orbis-code</a>
+  </footer>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  ORBIS ENCODER — v0.3 spec-compliant
+//  Pure JS, zero dependencies, single file
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Version configs (from v0.3 spec §5.3) ──────────────────────────────────
+const VERSIONS = {
+  lite:     { sMax: 28, rings: 13, sFloor: 6,  minDiam: 25 },
+  standard: { sMax: 44, rings: 20, sFloor: 8,  minDiam: 40 },
+  pro:      { sMax: 60, rings: 28, sFloor: 8,  minDiam: 60 },
+  ultra:    { sMax: 76, rings: 38, sFloor: 8,  minDiam: 80 },
+};
+
+// ── Sector count for ring r (1-indexed) ──────────────────────────────────
+function sectorCount(r, rMax, sMax, sFloor) {
+  return Math.max(sFloor, Math.round(sMax * r / rMax));
+}
+
+// ── Tiny hash → deterministic bits from a string ─────────────────────────
+// Uses a simple but effective non-cryptographic hash to fill data cells
+function stringToBits(str, count) {
+  // Encode string as UTF-8 bytes
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+
+  // FNV-1a variant for good bit distribution
+  const bits = [];
+  let h1 = 0x811c9dc5 >>> 0;
+  let h2 = 0x01000193 >>> 0;
+  let byteIdx = 0;
+
+  while (bits.length < count) {
+    const b = bytes[byteIdx % bytes.length];
+    h1 = Math.imul(h1 ^ b, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ (b + bits.length), 0x811c9dc5) >>> 0;
+    const mixed = (h1 ^ h2 ^ (byteIdx * 0x9e3779b9)) >>> 0;
+    for (let bit = 0; bit < 32 && bits.length < count; bit++) {
+      bits.push((mixed >> bit) & 1);
+    }
+    byteIdx++;
+  }
+  return bits;
+}
+
+// ── Build the full ORBIS bit matrix ───────────────────────────────────────
+function buildBitMatrix(payload, version) {
+  const cfg = VERSIONS[version];
+  const { sMax, rings, sFloor } = cfg;
+
+  // Count total cells
+  let totalCells = 0;
+  const ringCells = [];
+  for (let r = 1; r <= rings; r++) {
+    const s = sectorCount(r, rings, sMax, sFloor);
+    ringCells.push(s);
+    totalCells += s;
+  }
+
+  // Generate bits from payload (deterministic expansion)
+  const bits = stringToBits(payload, totalCells);
+
+  // Build per-ring bit arrays
+  const matrix = [];
+  let idx = 0;
+  for (let r = 0; r < rings; r++) {
+    const row = [];
+    for (let s = 0; s < ringCells[r]; s++) {
+      row.push(bits[idx++]);
+    }
+    matrix.push(row);
+  }
+  return matrix;
+}
+
+// ── ORBIS SVG renderer ────────────────────────────────────────────────────
+function renderORBIS({
+  payload = 'https://orbis.design',
+  version  = 'lite',
+  fg       = '#0a0a0f',
+  bg       = '#f5f2eb',
+  logoText = '◎',
+  size     = 400,
+}) {
+  const cfg = VERSIONS[version];
+  const { sMax, rings, sFloor } = cfg;
+  const cx = size / 2, cy = size / 2;
+  const R  = size / 2 - 4; // outer radius with small padding
+
+  // Layer radii (% of R, per v0.3 §4)
+  const logoR     = R * 0.18;   // L1: 0–18%
+  const identityR = R * 0.25;   // L2: 18–25%
+  const dataInR   = R * 0.25;   // L3 inner edge
+  const dataOutR  = R * 0.72;   // L3 outer edge (leaves room for L4+L5)
+  const ecInR     = R * 0.72;   // L4 inner
+  const ecOutR    = R * 0.86;   // L4 outer
+  const scanInR   = R * 0.86;   // L5 inner
+  const scanOutR  = R;           // L5 outer
+
+  const matrix = buildBitMatrix(payload, version);
+
+  // Ring geometry: data rings span dataInR to dataOutR
+  const usableDataR = dataOutR - dataInR;
+  const ringW = usableDataR / rings;
+
+  // Parse colour for alpha/lighter variants
+  const fgAlpha = (a) => fg + Math.round(a * 255).toString(16).padStart(2,'0');
+
+  let paths = '';
+  let defs  = '';
+
+  // ── Background circle ──
+  paths += `<circle cx="${cx}" cy="${cy}" r="${R + 2}" fill="${bg}"/>`;
+
+  // ── L5 — Outer Scan Cue Ring ──
+  // Alternating filled/gap segments create a dashed ring feel
+  const L5_SEGMENTS = 48;
+  const L5_GAP_FRAC = 0.25; // 25% gap between segments
+  for (let i = 0; i < L5_SEGMENTS; i++) {
+    const startAngle = (i / L5_SEGMENTS) * 2 * Math.PI - Math.PI / 2;
+    const endAngle   = ((i + 1 - L5_GAP_FRAC) / L5_SEGMENTS) * 2 * Math.PI - Math.PI / 2;
+    const path = annularArc(cx, cy, scanInR, scanOutR, startAngle, endAngle);
+    const opacity = (i % 6 === 0) ? 1.0 : 0.75; // accent every 6th = visual anchor
+    paths += `<path d="${path}" fill="${fg}" opacity="${opacity}"/>`;
+  }
+
+  // Three rotation anchors at 0°, 120°, 240° — each is a cluster of 3 filled segments
+  const anchorPositions = [0, 120, 240]; // degrees
+  anchorPositions.forEach(deg => {
+    const baseRad = (deg - 90) * Math.PI / 180;
+    const arcSpan = (3.5 / L5_SEGMENTS) * 2 * Math.PI;
+    const a1 = baseRad - arcSpan / 2;
+    const a2 = baseRad + arcSpan / 2;
+    const ap = annularArc(cx, cy, scanInR - 3, scanOutR + 2, a1, a2);
+    paths += `<path d="${ap}" fill="${fg}" opacity="1"/>`;
+    // Inner ring gap marker
+    const ip = annularArc(cx, cy, scanInR - 7, scanInR - 3, a1, a2);
+    paths += `<path d="${ip}" fill="${fg}" opacity="0.4"/>`;
+  });
+
+  // ── L4 — Error Correction Ring ──
+  // Visually: a dense dotted ring suggesting data density
+  const EC_DOTS = 80;
+  for (let i = 0; i < EC_DOTS; i++) {
+    const angle = (i / EC_DOTS) * 2 * Math.PI - Math.PI / 2;
+    const rMid  = (ecInR + ecOutR) / 2;
+    const x = cx + Math.cos(angle) * rMid;
+    const y = cy + Math.sin(angle) * rMid;
+    const sz = (i % 4 === 0) ? 2.2 : 1.3;
+    paths += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${sz}" fill="${fg}" opacity="${i%4===0?0.9:0.45}"/>`;
+  }
+  // EC ring boundary lines
+  paths += `<circle cx="${cx}" cy="${cy}" r="${ecInR}" fill="none" stroke="${fg}" stroke-width="0.6" opacity="0.2"/>`;
+  paths += `<circle cx="${cx}" cy="${cy}" r="${ecOutR}" fill="none" stroke="${fg}" stroke-width="0.6" opacity="0.2"/>`;
+
+  // ── L3 — Primary Data Halo ──
+  for (let r = 0; r < rings; r++) {
+    const innerR = dataInR + r * ringW;
+    const outerR = dataInR + (r + 1) * ringW - 0.8; // small gap between rings
+    const rowBits = matrix[r];
+    const numSectors = rowBits.length;
+    const angleStep = (2 * Math.PI) / numSectors;
+
+    for (let s = 0; s < numSectors; s++) {
+      if (rowBits[s] === 0) continue; // bit 0 = arc absent
+      const startAngle = s * angleStep - Math.PI / 2;
+      const endAngle   = (s + 1) * angleStep - Math.PI / 2 - 0.02; // tiny gap
+      const path = annularArc(cx, cy, innerR, outerR, startAngle, endAngle);
+      // Vary opacity slightly by ring depth for visual depth
+      const depth = r / rings;
+      const op = 0.7 + depth * 0.3;
+      paths += `<path d="${path}" fill="${fg}" opacity="${op.toFixed(2)}"/>`;
+    }
+  }
+
+  // ── L2 — Identity Ring ──
+  // A fine ring with notch modulation suggesting encoded brand ID
+  const ID_NOTCHES = 60;
+  for (let i = 0; i < ID_NOTCHES; i++) {
+    const a1 = (i / ID_NOTCHES) * 2 * Math.PI - Math.PI / 2;
+    const a2 = ((i + 0.7) / ID_NOTCHES) * 2 * Math.PI - Math.PI / 2;
+    const innerV = (i % 3 === 0) ? logoR + 1 : logoR + 3;
+    const outerV = identityR - 1;
+    const ip = annularArc(cx, cy, innerV, outerV, a1, a2);
+    const op = (i % 3 === 0) ? 0.9 : 0.35;
+    paths += `<path d="${ip}" fill="${fg}" opacity="${op}"/>`;
+  }
+
+  // ── L1 — Core Logo Anchor ──
+  // Solid circle + logo text
+  paths += `<circle cx="${cx}" cy="${cy}" r="${logoR}" fill="${bg}"/>`;
+  paths += `<circle cx="${cx}" cy="${cy}" r="${logoR}" fill="none" stroke="${fg}" stroke-width="1.5" opacity="0.6"/>`;
+  // Subtle inner ring marks
+  paths += `<circle cx="${cx}" cy="${cy}" r="${logoR * 0.85}" fill="none" stroke="${fg}" stroke-width="0.5" opacity="0.15"/>`;
+
+  // Logo text
+  const logoFontSize = logoText.length === 1 ? logoR * 0.85 : logoR * 0.55;
+  paths += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
+    font-family="DM Serif Display, Georgia, serif"
+    font-size="${logoFontSize.toFixed(1)}"
+    fill="${fg}">${escapeXml(logoText)}</text>`;
+
+  // ── Outer boundary ──
+  paths += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${fg}" stroke-width="1.5" opacity="0.5"/>`;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+  <defs>
+    <clipPath id="circle-clip">
+      <circle cx="${cx}" cy="${cy}" r="${R + 1}"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#circle-clip)">
+    ${paths}
+  </g>
+</svg>`;
+
+  return svg;
+}
+
+// ── SVG path: annular arc (donut sector) ──────────────────────────────────
+function annularArc(cx, cy, innerR, outerR, startAngle, endAngle) {
+  const x1 = cx + Math.cos(startAngle) * outerR;
+  const y1 = cy + Math.sin(startAngle) * outerR;
+  const x2 = cx + Math.cos(endAngle)   * outerR;
+  const y2 = cy + Math.sin(endAngle)   * outerR;
+  const x3 = cx + Math.cos(endAngle)   * innerR;
+  const y3 = cy + Math.sin(endAngle)   * innerR;
+  const x4 = cx + Math.cos(startAngle) * innerR;
+  const y4 = cy + Math.sin(startAngle) * innerR;
+  const large = (endAngle - startAngle) > Math.PI ? 1 : 0;
+  return [
+    `M ${x1.toFixed(2)} ${y1.toFixed(2)}`,
+    `A ${outerR.toFixed(2)} ${outerR.toFixed(2)} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`,
+    `L ${x3.toFixed(2)} ${y3.toFixed(2)}`,
+    `A ${innerR.toFixed(2)} ${innerR.toFixed(2)} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)}`,
+    'Z'
+  ].join(' ');
+}
+
+function escapeXml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UI CONTROLLER
+// ═══════════════════════════════════════════════════════════════════════════
+
+let currentVersion = 'lite';
+let currentSvg     = '';
+
+function getInputs() {
+  return {
+    payload  : document.getElementById('url-input').value.trim() || 'https://orbis.design',
+    version  : currentVersion,
+    fg       : document.getElementById('fg-color').value,
+    bg       : document.getElementById('bg-color').value,
+    logoText : document.getElementById('logo-input').value.trim() || '◎',
+    size     : 400,
+  };
+}
+
+function updatePayloadInfo(inputs) {
+  const cfg = VERSIONS[inputs.version];
+  const encoder = new TextEncoder();
+  const rawBytes = encoder.encode(inputs.payload).length;
+  const lz4est = Math.ceil(rawBytes * 0.65);
+
+  let totalCells = 0;
+  for (let r = 1; r <= cfg.rings; r++) {
+    totalCells += sectorCount(r, cfg.rings, cfg.sMax, cfg.sFloor);
+  }
+  const logoE   = Math.ceil(totalCells * 0.0081);
+  const ec      = Math.ceil(totalCells * 0.33);
+  const usable  = Math.floor((totalCells - ec - logoE) / 8);
+
+  const fits    = rawBytes <= usable * 1.54; // ~65% compression headroom
+  const pctUsed = Math.min(100, Math.round((lz4est / usable) * 100));
+
+  document.getElementById('payload-info').innerHTML =
+    `<strong>Payload:</strong> ${rawBytes} bytes raw / ~${lz4est} B compressed<br>` +
+    `<strong>Version capacity:</strong> ~${usable} bytes (${totalCells} cells, 33% EC)<br>` +
+    `<strong>Usage:</strong> ${pctUsed}% ${pctUsed > 100 ? '<span style="color:var(--scan)">⚠ Exceeds capacity — upgrade version</span>' : pctUsed > 80 ? '⚡ High — consider upgrading' : '✓ Good fit'}<br>` +
+    `<strong>Min print size:</strong> ${cfg.minDiam} mm`;
+}
+
+// ── Registry: store generated codes so scanner can look them up ──────────
+const REGISTRY_KEY = 'orbis_registry';
+
+function registerCode(payload, version, matrix) {
+  try {
+    const reg = JSON.parse(localStorage.getItem(REGISTRY_KEY) || '{}');
+    // Store by fingerprint AND by payload+version for similarity lookup
+    const fp = fingerprintMatrix(matrix);
+    reg[fp] = { payload, version, ts: Date.now() };
+    // Also store a reverse lookup by payload key
+    const payloadKey = 'p_' + btoa(encodeURIComponent(payload)).slice(0,24) + '_' + version;
+    reg[payloadKey] = { payload, version, ts: Date.now() };
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(reg));
+    return fp;
+  } catch(e) { console.warn('Registry write failed', e); return null; }
+}
+
+function fingerprintMatrix(matrix) {
+  let h = 0x12345678 >>> 0;
+  for (const row of matrix) {
+    for (const bit of row) {
+      h = Math.imul(h ^ bit, 0x9e3779b9) >>> 0;
+      h = ((h << 13) | (h >>> 19)) >>> 0;
+    }
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+function generate() {
+  const inputs = getInputs();
+  currentSvg   = renderORBIS(inputs);
+
+  const canvas  = document.getElementById('orbis-canvas');
+  canvas.innerHTML = currentSvg;
+
+  // Register the code so the scanner can find it
+  const matrix = buildBitMatrix(inputs.payload, inputs.version);
+  const fp = registerCode(inputs.payload, inputs.version, matrix);
+
+  // Show registered indicator
+  const regEl = document.getElementById('reg-status');
+  if (regEl && fp) {
+    regEl.textContent = '✓ Registered · fingerprint ' + fp;
+    regEl.style.color = 'var(--accent)';
+  }
+
+  updatePayloadInfo(inputs);
+  updateDownloads();
+}
+
+function updateDownloads() {
+  // SVG download
+  const svgBlob = new Blob([currentSvg], { type: 'image/svg+xml' });
+  const svgUrl  = URL.createObjectURL(svgBlob);
+  document.getElementById('dl-svg').href = svgUrl;
+
+  // PNG download via canvas
+  const svgEl  = document.getElementById('orbis-canvas').querySelector('svg');
+  const canvas = document.createElement('canvas');
+  canvas.width  = 800;
+  canvas.height = 800;
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, 800, 800);
+    URL.revokeObjectURL(url);
+    document.getElementById('dl-png').href = canvas.toDataURL('image/png');
+  };
+  img.src = url;
+}
+
+// ── Event bindings ──────────────────────────────────────────────────────
+document.getElementById('gen-btn').addEventListener('click', generate);
+
+// Colour pickers sync hex labels
+['fg','bg'].forEach(id => {
+  const picker = document.getElementById(id + '-color');
+  const hex    = document.getElementById(id + '-hex');
+  picker.addEventListener('input', () => { hex.textContent = picker.value; });
+});
+
+// Version selector
+document.querySelectorAll('.ring-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.ring-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentVersion = btn.dataset.version;
+  });
+});
+
+// Live preview on Enter
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') generate();
+});
+
+// Auto-generate on load
+window.addEventListener('load', generate);
+</script>
+</body>
+</html>
