@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ORBIS Scanner v2.0</title>
+<title>ORBIS Scanner v3.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -162,59 +162,122 @@ header {
   color: rgba(255,255,255,0.25);
 }
 
-.confirm-row {
+.result-card {
   display: none;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   width: 100%;
-  max-width: 380px;
+  max-width: 420px;
+  background: rgba(0, 200, 83, 0.12);
+  border: 2px solid rgba(0, 200, 83, 0.4);
+  border-radius: 12px;
+  padding: 1.5rem;
+  pointer-events: all;
+  animation: slideUp 0.3s ease-out;
 }
-.confirm-row.visible { display: flex; }
+.result-card.visible { display: flex; }
 
-.result-url {
-  font-family: 'DM Mono', monospace;
-  font-size: 0.78rem;
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.result-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.result-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--ok);
-  background: rgba(0,200,83,0.08);
-  border: 1px solid rgba(0,200,83,0.25);
-  border-radius: 4px;
-  padding: 0.7rem 1rem;
-  width: 100%;
-  text-align: center;
-  word-break: break-all;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
-.open-btn {
+.result-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.5);
+}
+
+.result-payload {
   width: 100%;
-  padding: 0.9rem;
-  background: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.85rem;
   color: white;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  word-break: break-all;
+  line-height: 1.6;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.result-actions {
+  width: 100%;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 0.9rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
   font-size: 0.88rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  transition: all 0.2s;
   pointer-events: all;
 }
-.open-btn:hover { background: #3b3bff; }
-.open-btn:active { transform: scale(0.99); }
 
-.dismiss-btn {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-family: 'DM Mono', monospace;
-  font-size: 0.7rem;
-  cursor: pointer;
-  pointer-events: all;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.action-btn.primary {
+  background: var(--ok);
+  color: white;
 }
-.dismiss-btn:hover { color: #f0ede6; }
+.action-btn.primary:hover {
+  background: #00e567;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,200,83,0.3);
+}
+
+.action-btn.secondary {
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.action-btn.secondary:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.copy-toast {
+  position: fixed;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--ok);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s;
+  z-index: 1000;
+}
+.copy-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 
 .permission-gate {
   position: fixed;
@@ -304,17 +367,17 @@ header {
 
 <div class="permission-gate" id="permission-gate">
   <div class="big-icon">◎</div>
-  <h2>ORBIS Scanner v2.0</h2>
-  <p>Point your camera at any ORBIS code. The scanner reads the encoded data directly from the pattern — no database lookup required.</p>
+  <h2>ORBIS Scanner v3.0</h2>
+  <p>Point your camera at any ORBIS code — on screen, printed, or in an image. Universal decoding works everywhere.</p>
   <button class="start-btn" id="start-btn">Enable Camera</button>
   <label class="upload-label">
     or scan an image file
     <input type="file" id="img-upload" accept="image/*">
   </label>
   <div class="how-it-works">
-    HOW IT WORKS<br>
-    Circle detection → anchor validation → bit sampling → real data decoding<br>
-    Works like QR codes — universal decoding
+    SMART SCANNING<br>
+    Auto-detects version · Error correction · Instant decode<br>
+    Works screen-to-screen like QR codes
   </div>
 </div>
 
@@ -341,11 +404,12 @@ header {
 </div>
 
 <div class="flash" id="flash"></div>
+<div class="copy-toast" id="copy-toast">✓ Copied to clipboard</div>
 
 <header>
   <div class="logo-word"><em>O</em>RBIS</div>
-  <div class="mode-badge">SCANNER V2</div>
-  <a href="orbis-generator-v2.html" class="header-link">← Generator</a>
+  <div class="mode-badge">SCANNER V3</div>
+  <a href="orbis-generator-v3.html" class="header-link">← Generator</a>
 </header>
 
 <div class="status-strip">
@@ -355,39 +419,42 @@ header {
     <span id="scan-count">0 frames</span>
   </div>
   <div class="status-text searching" id="status-text">Searching for ORBIS code…</div>
-  <div class="confirm-row" id="confirm-row">
-    <div class="result-url" id="result-url">—</div>
-    <button class="open-btn" id="open-btn">Open URL</button>
-    <button class="dismiss-btn" id="dismiss-btn">Scan again</button>
+  
+  <div class="result-card" id="result-card">
+    <div class="result-header">
+      <span class="result-title">✓ Decoded</span>
+      <span class="result-meta" id="result-meta">98% · Lite</span>
+    </div>
+    <div class="result-payload" id="result-payload">—</div>
+    <div class="result-actions">
+      <button class="action-btn primary" id="action-btn">Open Link</button>
+      <button class="action-btn secondary" id="scan-another-btn">Scan Another</button>
+    </div>
   </div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-//  ORBIS DECODER V2.0 — REAL DATA DECODING
-//  Now actually decodes data from the pattern (like QR codes)
-//  NO localStorage dependency — universal decoding
+//  ORBIS SCANNER V3.0 — Smart UX & Better Feedback
 // ═══════════════════════════════════════════════════════════════════════════
 
 const VERSIONS = {
   lite:     { rings: 10, sMax: 32, sFloor: 10, dataBytes: 17 },
   standard: { rings: 16, sMax: 40, sFloor: 12, dataBytes: 34 },
   pro:      { rings: 22, sMax: 48, sFloor: 14, dataBytes: 56 },
+  ultra:    { rings: 28, sMax: 56, sFloor: 16, dataBytes: 83 },
+  mega:     { rings: 35, sMax: 64, sFloor: 18, dataBytes: 117 },
 };
 
 function sectorCount(r, rMax, sMax, sFloor) {
   return Math.max(sFloor, Math.round(sMax * r / rMax));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ERROR CORRECTION (matching generator)
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── Error Correction ───────────────────────────────────────────────────────
 function correctErrors(receivedBytes, dataLen, ecLen) {
   const data = receivedBytes.slice(0, dataLen);
   const ec = receivedBytes.slice(dataLen, dataLen + ecLen);
   
-  // Verify EC codes
   let errors = 0;
   for (let i = 0; i < ecLen; i++) {
     let expected = 0;
@@ -399,9 +466,7 @@ function correctErrors(receivedBytes, dataLen, ecLen) {
     }
   }
   
-  // Simple single-bit error correction
   if (errors > 0 && errors < ecLen / 3) {
-    // Try flipping bits in data to see if EC improves
     for (let byteIdx = 0; byteIdx < dataLen; byteIdx++) {
       for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
         const testData = new Uint8Array(data);
@@ -426,10 +491,7 @@ function correctErrors(receivedBytes, dataLen, ecLen) {
   return { data, errors, correctable: errors < ecLen / 2 };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  DATA DECODING
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── Data Decoding ──────────────────────────────────────────────────────────
 function decodePayload(dataBytes) {
   if (dataBytes.length < 2) return null;
   
@@ -441,7 +503,6 @@ function decodePayload(dataBytes) {
   
   try {
     const text = decoder.decode(payload);
-    // Validate it's reasonable text
     if (text.length === 0 || text.length > 500) return null;
     return text;
   } catch {
@@ -449,20 +510,18 @@ function decodePayload(dataBytes) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  BIT MATRIX EXTRACTION
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── Bit Matrix Extraction ──────────────────────────────────────────────────
 function extractVersion(matrix) {
-  if (!matrix[0] || matrix[0].length < 2) return 'lite';
-  const marker = (matrix[0][0] << 1) | matrix[0][1];
-  return ['lite', 'standard', 'pro'][marker] || 'lite';
+  if (!matrix[0] || matrix[0].length < 3) return 'lite';
+  const megaBit = matrix[0][0];
+  const marker = (matrix[0][1] << 1) | matrix[0][2];
+  
+  if (megaBit === 1 && marker === 0b11) return 'mega';
+  
+  return ['lite', 'standard', 'pro', 'ultra'][marker] || 'lite';
 }
 
 function matrixToBytes(matrix, version) {
-  const cfg = VERSIONS[version];
-  
-  // Flatten matrix to bits
   const bits = [];
   for (const row of matrix) {
     for (const bit of row) {
@@ -470,10 +529,8 @@ function matrixToBytes(matrix, version) {
     }
   }
   
-  // Skip first 2 version bits
-  const dataBits = bits.slice(2);
+  const dataBits = bits.slice(3);
   
-  // Convert to bytes
   const bytes = [];
   for (let i = 0; i < dataBits.length; i += 8) {
     let byte = 0;
@@ -487,21 +544,12 @@ function matrixToBytes(matrix, version) {
 }
 
 function decodeBitMatrix(matrix) {
-  // Extract version from first 2 bits
   const version = extractVersion(matrix);
   const cfg = VERSIONS[version];
-  
-  // Convert matrix to bytes
   const allBytes = matrixToBytes(matrix, version);
-  
-  // Split data and EC
   const dataLen = cfg.dataBytes;
   const ecLen = Math.ceil(dataLen * 0.3);
-  
-  // Apply error correction
   const corrected = correctErrors(allBytes, dataLen, ecLen);
-  
-  // Decode payload
   const payload = decodePayload(corrected.data);
   
   return {
@@ -513,10 +561,7 @@ function decodeBitMatrix(matrix) {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  IMAGE PROCESSING
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ── Image Processing ───────────────────────────────────────────────────────
 function toGray(r, g, b) {
   return (0.299 * r + 0.587 * g + 0.114 * b) | 0;
 }
@@ -531,7 +576,7 @@ function detectCircles(imgData, width, height) {
   }
   
   const mean = sum / grayData.length;
-  const threshold = mean * 0.6;
+  const threshold = mean * 0.55;
   
   const candidates = [];
   const step = 6;
@@ -579,59 +624,6 @@ function detectCircles(imgData, width, height) {
   return merged;
 }
 
-function validateAnchorPattern(grayData, width, height, cx, cy, R, threshold) {
-  const NUM_PROBES = 60;
-  const darkness = new Float32Array(NUM_PROBES);
-  
-  for (let i = 0; i < NUM_PROBES; i++) {
-    const angle = (i / NUM_PROBES) * 2 * Math.PI - Math.PI / 2;
-    let darkSum = 0, count = 0;
-    
-    for (let da = -1.5; da <= 1.5; da += 1.5) {
-      const a2 = angle + (da / NUM_PROBES) * 2 * Math.PI;
-      for (const dr of [-3, 0, 3]) {
-        const r2 = R + dr;
-        const px = Math.round(cx + Math.cos(a2) * r2);
-        const py = Math.round(cy + Math.sin(a2) * r2);
-        if (px >= 0 && px < width && py >= 0 && py < height) {
-          darkSum += (grayData[py * width + px] < threshold) ? 1 : 0;
-          count++;
-        }
-      }
-    }
-    darkness[i] = count > 0 ? darkSum / count : 0;
-  }
-  
-  const peaks = [];
-  for (let i = 0; i < NUM_PROBES; i++) {
-    const prev = darkness[(i - 1 + NUM_PROBES) % NUM_PROBES];
-    const next = darkness[(i + 1) % NUM_PROBES];
-    if (darkness[i] > 0.45 && darkness[i] >= prev && darkness[i] >= next) {
-      const last = peaks[peaks.length - 1];
-      if (!last || i - last.idx >= 4) {
-        peaks.push({ idx: i, val: darkness[i], angle: (i / NUM_PROBES) * 360 });
-      }
-    }
-  }
-  
-  if (peaks.length >= 3) {
-    for (let a = 0; a < peaks.length - 2; a++) {
-      for (let b = a + 1; b < peaks.length - 1; b++) {
-        for (let c = b + 1; c < peaks.length; c++) {
-          const ab = Math.abs(peaks[b].angle - peaks[a].angle);
-          const bc = Math.abs(peaks[c].angle - peaks[b].angle);
-          const ca = 360 - ab - bc;
-          if ([ab, bc, ca].every(d => Math.abs(d - 120) < 25)) {
-            return { valid: true, anchors: [peaks[a], peaks[b], peaks[c]] };
-          }
-        }
-      }
-    }
-  }
-  
-  return { valid: false };
-}
-
 function sampleBitMatrix(grayData, width, height, cx, cy, R, version, threshold) {
   const cfg = VERSIONS[version];
   const { sMax, rings, sFloor } = cfg;
@@ -655,7 +647,6 @@ function sampleBitMatrix(grayData, width, height, cx, cy, R, version, threshold)
       const angle = s * angStep + angStep / 2 - Math.PI / 2;
       let darkCount = 0, sampleCount = 0;
       
-      // Multi-point sampling for robustness
       for (const dr of [-0.2, 0, 0.2]) {
         const sampleR = R * (midFrac + dr * ringFrac);
         for (const da of [-0.3, 0, 0.3]) {
@@ -669,7 +660,7 @@ function sampleBitMatrix(grayData, width, height, cx, cy, R, version, threshold)
         }
       }
       
-      row.push(sampleCount > 0 && (darkCount / sampleCount) > 0.35 ? 1 : 0);
+      row.push(sampleCount > 0 && (darkCount / sampleCount) > 0.32 ? 1 : 0);
     }
     matrix.push(row);
   }
@@ -701,31 +692,56 @@ function setStatus(msg, cls = 'searching') {
   el.className = 'status-text ' + cls;
 }
 
+function showCopyToast() {
+  const toast = document.getElementById('copy-toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
 function showResult(payload, confidence, version) {
   resultFound = true;
   
+  // Flash effect
   const fl = document.getElementById('flash');
   fl.classList.add('show');
   setTimeout(() => fl.classList.remove('show'), 300);
   
-  document.getElementById('result-url').textContent = payload;
-  document.getElementById('confirm-row').classList.add('visible');
+  // Pause scan line animation
   document.getElementById('scan-line').style.animationPlayState = 'paused';
-  setStatus(`✓ Decoded (${confidence}% · ${version})`, 'found');
   
-  document.getElementById('open-btn').onclick = () => {
-    if (payload.startsWith('http://') || payload.startsWith('https://')) {
-      window.open(payload, '_blank');
-    } else {
+  // Auto-copy to clipboard
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(payload).then(() => {
+      showCopyToast();
+    }).catch(() => {});
+  }
+  
+  // Update result card
+  document.getElementById('result-payload').textContent = payload;
+  document.getElementById('result-meta').textContent = `${confidence}% · ${version.toUpperCase()}`;
+  document.getElementById('result-card').classList.add('visible');
+  
+  setStatus('', 'found');
+  
+  // Smart action button
+  const actionBtn = document.getElementById('action-btn');
+  const isUrl = payload.startsWith('http://') || payload.startsWith('https://');
+  
+  if (isUrl) {
+    actionBtn.textContent = '🔗 Open Link';
+    actionBtn.onclick = () => window.open(payload, '_blank');
+  } else {
+    actionBtn.textContent = '📋 Copy Again';
+    actionBtn.onclick = () => {
       navigator.clipboard?.writeText(payload);
-      setStatus('Copied to clipboard', 'found');
-    }
-  };
+      showCopyToast();
+    };
+  }
 }
 
-function dismissResult() {
+function scanAnother() {
   resultFound = false;
-  document.getElementById('confirm-row').classList.remove('visible');
+  document.getElementById('result-card').classList.remove('visible');
   document.getElementById('scan-line').style.animationPlayState = 'running';
   setStatus('Searching for ORBIS code…', 'searching');
 }
@@ -766,12 +782,7 @@ function processFrame() {
   setStatus('Circular pattern detected — decoding…', 'detecting');
   
   for (const circ of circles) {
-    const anchor = validateAnchorPattern(
-      circ.grayData, PROC_W, PROC_H, 
-      circ.cx, circ.cy, circ.r, circ.threshold
-    );
-    
-    for (const versionName of ['lite', 'standard', 'pro']) {
+    for (const versionName of ['lite', 'standard', 'pro', 'ultra', 'mega']) {
       try {
         const sampled = sampleBitMatrix(
           circ.grayData, PROC_W, PROC_H,
@@ -786,9 +797,7 @@ function processFrame() {
           animFrame = requestAnimationFrame(processFrame);
           return;
         }
-      } catch (err) {
-        // Try next version
-      }
+      } catch (err) {}
     }
   }
   
@@ -813,7 +822,7 @@ function processImage(imageEl) {
   const circles = detectCircles(imgData, pw, ph);
   
   for (const circ of circles) {
-    for (const versionName of ['lite', 'standard', 'pro']) {
+    for (const versionName of ['lite', 'standard', 'pro', 'ultra', 'mega']) {
       try {
         const sampled = sampleBitMatrix(
           circ.grayData, pw, ph,
@@ -855,6 +864,7 @@ async function startCamera() {
   }
 }
 
+// ── Event Bindings ─────────────────────────────────────────────────────────
 document.getElementById('start-btn').addEventListener('click', startCamera);
 
 document.getElementById('img-upload').addEventListener('change', e => {
@@ -867,7 +877,7 @@ document.getElementById('img-upload').addEventListener('change', e => {
   img.src = URL.createObjectURL(file);
 });
 
-document.getElementById('dismiss-btn').addEventListener('click', dismissResult);
+document.getElementById('scan-another-btn').addEventListener('click', scanAnother);
 
 navigator.permissions?.query({ name: 'camera' }).then(p => {
   if (p.state === 'granted') startCamera();
