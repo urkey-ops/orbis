@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBIS Scanner</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink:    #0a0a0f;
+  --paper:  #f5f2eb;
+  --accent: #1a1aff;
+  --scan:   #ff3b00;
+  --ok:     #00c853;
+  --muted:  #8a8a9a;
+  --border: #d8d4c8;
+  --dark:   #0f0f1a;
+}
+
+html, body {
+  height: 100%;
+  background: var(--dark);
+  color: #f0ede6;
+  font-family: 'DM Sans', sans-serif;
+  overflow: hidden;
+}
+
+/* ── header ── */
+header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 2rem;
+  background: rgba(15,15,26,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.logo-word {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.6rem;
+  color: #f0ede6;
+  line-height: 1;
+}
+.logo-word em { color: var(--accent); font-style: italic; }
+.mode-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--scan);
+  border: 1px solid var(--scan);
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+}
+.header-link {
+  margin-left: auto;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 0.35rem 0.8rem;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.header-link:hover { color: #f0ede6; border-color: rgba(255,255,255,0.3); }
+
+/* ── viewfinder ── */
+.viewfinder {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#video {
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── scan overlay ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Darkening vignette with circular cutout */
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 30%, rgba(15,15,26,0.72) 60%, rgba(15,15,26,0.88) 100%);
+}
+
+/* The finder ring */
+.finder-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(70vw, 70vh);
+  height: min(70vw, 70vh);
+  pointer-events: none;
+}
+
+.finder-ring svg {
+  width: 100%; height: 100%;
+  overflow: visible;
+}
+
+/* Scanning line */
+.scan-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(68vw, 68vh);
+  height: 2px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(90deg, transparent, var(--scan), transparent);
+  animation: scanline 2.4s ease-in-out infinite;
+  opacity: 0.8;
+  border-radius: 1px;
+}
+@keyframes scanline {
+  0%   { top: calc(50% - min(34vw,34vh)); opacity: 0; }
+  10%  { opacity: 0.8; }
+  90%  { opacity: 0.8; }
+  100% { top: calc(50% + min(34vw,34vh)); opacity: 0; }
+}
+
+/* ── status strip ── */
+.status-strip {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  padding: 1.5rem 2rem 2rem;
+  background: linear-gradient(to top, rgba(15,15,26,0.98) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status-text {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+  min-height: 1.2rem;
+  transition: color 0.3s;
+}
+.status-text.searching  { color: var(--muted); }
+.status-text.detecting  { color: #f0ede6; }
+.status-text.found      { color: var(--ok); }
+.status-text.error      { color: var(--scan); }
+
+/* FPS + debug */
+.debug-row {
+  display: flex;
+  gap: 1.5rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.25);
+}
+
+/* Confirm button row */
+.confirm-row {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 380px;
+}
+.confirm-row.visible { display: flex; }
+
+.result-url {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--ok);
+  background: rgba(0,200,83,0.08);
+  border: 1px solid rgba(0,200,83,0.25);
+  border-radius: 4px;
+  padding: 0.7rem 1rem;
+  width: 100%;
+  text-align: center;
+  word-break: break-all;
+}
+
+.open-btn {
+  width: 100%;
+  padding: 0.9rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  pointer-events: all;
+}
+.open-btn:hover { background: #3b3bff; }
+.open-btn:active { transform: scale(0.99); }
+
+.dismiss-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  cursor: pointer;
+  pointer-events: all;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dismiss-btn:hover { color: #f0ede6; }
+
+/* ── Permission gate ── */
+.permission-gate {
+  position: fixed;
+  inset: 0;
+  background: var(--dark);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 2rem;
+  z-index: 200;
+}
+.permission-gate.hidden { display: none; }
+
+.big-icon {
+  font-size: 4rem;
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+
+.permission-gate h2 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.8rem;
+  text-align: center;
+  color: #f0ede6;
+}
+.permission-gate p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.7;
+  max-width: 340px;
+}
+.start-btn {
+  padding: 1rem 2.5rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s;
+}
+.start-btn:hover { background: #3b3bff; }
+
+.upload-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 0.6rem 1.2rem;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.upload-label:hover { color: #f0ede6; border-color: rgba(255,255,255,0.3); }
+#img-upload { display: none; }
+
+.how-it-works {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.2);
+  text-align: center;
+  line-height: 1.8;
+  max-width: 340px;
+}
+
+/* detection flash */
+.flash {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,200,83,0.12);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 50;
+  transition: opacity 0.1s;
+}
+.flash.show { opacity: 1; }
+
+/* canvas (hidden, used for processing) */
+#proc-canvas { display: none; }
+</style>
+</head>
+<body>
+
+<!-- permission gate -->
+<div class="permission-gate" id="permission-gate">
+  <div class="big-icon">◎</div>
+  <h2>ORBIS Scanner</h2>
+  <p>Point your camera at an ORBIS code generated on this device. The scanner detects the circular pattern and reads the embedded data.</p>
+  <button class="start-btn" id="start-btn">Enable Camera</button>
+  <label class="upload-label">
+    or scan an image file
+    <input type="file" id="img-upload" accept="image/*">
+  </label>
+  <div class="how-it-works">
+    HOW IT WORKS<br>
+    Circle detection → anchor validation → bit sampling → payload lookup<br>
+    Codes must be generated on this device (same browser session)
+  </div>
+</div>
+
+<!-- live camera view -->
+<div class="viewfinder">
+  <video id="video" autoplay playsinline muted></video>
+</div>
+
+<!-- processing canvas -->
+<canvas id="proc-canvas"></canvas>
+
+<!-- overlay -->
+<div class="overlay">
+  <div class="vignette"></div>
+  <div class="finder-ring">
+    <svg id="finder-svg" viewBox="0 0 300 300">
+      <!-- animated finder ring -->
+      <circle cx="150" cy="150" r="140" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+      <!-- corner arcs -->
+      <path d="M 150 10 A 140 140 0 0 1 280 90" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 290 150 A 140 140 0 0 1 210 276" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 150 290 A 140 140 0 0 1 20 210" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 10 150 A 140 140 0 0 1 90 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      <!-- center crosshair -->
+      <line x1="145" y1="150" x2="155" y2="150" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+      <line x1="150" y1="145" x2="150" y2="155" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+    </svg>
+  </div>
+  <div class="scan-line" id="scan-line"></div>
+</div>
+
+<div class="flash" id="flash"></div>
+
+<!-- header -->
+<header>
+  <div class="logo-word"><em>O</em>RBIS</div>
+  <div class="mode-badge">SCANNER</div>
+  <a href="orbis.html" class="header-link">← Generator</a>
+</header>
+
+<!-- status -->
+<div class="status-strip">
+  <div class="debug-row">
+    <span id="fps-counter">— fps</span>
+    <span id="circles-found">0 candidates</span>
+    <span id="scan-count">0 frames</span>
+  </div>
+  <div class="status-text searching" id="status-text">Searching for ORBIS code…</div>
+  <div class="confirm-row" id="confirm-row">
+    <div class="result-url" id="result-url">—</div>
+    <button class="open-btn" id="open-btn">Open URL</button>
+    <button class="dismiss-btn" id="dismiss-btn">Scan again</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  ORBIS SCANNER ENGINE
+//  Matches the v0.3 spec encoder in orbis.html
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Must mirror the generator exactly ─────────────────────────────────────
+const VERSIONS = {
+  lite:     { sMax: 28, rings: 13, sFloor: 6 },
+  standard: { sMax: 44, rings: 20, sFloor: 8 },
+  pro:      { sMax: 60, rings: 28, sFloor: 8 },
+  ultra:    { sMax: 76, rings: 38, sFloor: 8 },
+};
+
+function sectorCount(r, rMax, sMax, sFloor) {
+  return Math.max(sFloor, Math.round(sMax * r / rMax));
+}
+
+function stringToBits(str, count) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+  const bits = [];
+  let h1 = 0x811c9dc5 >>> 0;
+  let h2 = 0x01000193 >>> 0;
+  let byteIdx = 0;
+  while (bits.length < count) {
+    const b = bytes[byteIdx % bytes.length];
+    h1 = Math.imul(h1 ^ b, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ (b + bits.length), 0x811c9dc5) >>> 0;
+    const mixed = (h1 ^ h2 ^ (byteIdx * 0x9e3779b9)) >>> 0;
+    for (let bit = 0; bit < 32 && bits.length < count; bit++) {
+      bits.push((mixed >> bit) & 1);
+    }
+    byteIdx++;
+  }
+  return bits;
+}
+
+// Build expected bit matrix for a known payload+version (for registration)
+function buildBitMatrix(payload, version) {
+  const cfg = VERSIONS[version];
+  const { sMax, rings, sFloor } = cfg;
+  let totalCells = 0;
+  const ringCells = [];
+  for (let r = 1; r <= rings; r++) {
+    const s = sectorCount(r, rings, sMax, sFloor);
+    ringCells.push(s);
+    totalCells += s;
+  }
+  const bits = stringToBits(payload, totalCells);
+  const matrix = [];
+  let idx = 0;
+  for (let r = 0; r < rings; r++) {
+    const row = [];
+    for (let s = 0; s < ringCells[r]; s++) row.push(bits[idx++]);
+    matrix.push(row);
+  }
+  return matrix;
+}
+
+// Fingerprint: stable hash of the full bit matrix
+function fingerprintMatrix(matrix) {
+  let h = 0x12345678 >>> 0;
+  for (const row of matrix) {
+    for (const bit of row) {
+      h = Math.imul(h ^ bit, 0x9e3779b9) >>> 0;
+      h = ((h << 13) | (h >>> 19)) >>> 0;
+    }
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+// ── localStorage registry ──────────────────────────────────────────────────
+// Generator writes here; scanner reads here
+const REGISTRY_KEY = 'orbis_registry';
+
+function loadRegistry() {
+  try { return JSON.parse(localStorage.getItem(REGISTRY_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function lookupFingerprint(fp) {
+  const reg = loadRegistry();
+  return reg[fp] || null;
+}
+
+// For demo: also check by trying all registry entries against the sampled matrix
+function lookupBySimilarity(sampledMatrix, version) {
+  const reg = loadRegistry();
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const [fp, entry] of Object.entries(reg)) {
+    if (entry.version !== version) continue;
+    try {
+      const expected = buildBitMatrix(entry.payload, version);
+      // Compare matrices
+      let match = 0, total = 0;
+      for (let r = 0; r < Math.min(sampledMatrix.length, expected.length); r++) {
+        for (let s = 0; s < Math.min(sampledMatrix[r].length, expected[r].length); s++) {
+          if (sampledMatrix[r][s] === expected[r][s]) match++;
+          total++;
+        }
+      }
+      const score = match / total;
+      if (score > bestScore) { bestScore = score; bestMatch = entry; }
+    } catch {}
+  }
+  return bestScore >= 0.72 ? { ...bestMatch, confidence: Math.round(bestScore * 100) } : null;
+}
+
+// ── Grayscale conversion ───────────────────────────────────────────────────
+function toGray(r, g, b) {
+  return (0.299 * r + 0.587 * g + 0.114 * b) | 0;
+}
+
+// ── Fast radial circle detector ─────────────────────────────────────────────
+// Strategy: for each sampled center point, sum dark pixels on a circle of radius R
+// A circle with a high "dark ring score" is an ORBIS outer scan ring candidate
+function detectCircles(imgData, width, height) {
+  const grayData = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    grayData[i] = toGray(imgData[i*4], imgData[i*4+1], imgData[i*4+2]);
+  }
+
+  // Adaptive threshold
+  let sum = 0;
+  for (let v of grayData) sum += v;
+  const mean = sum / grayData.length;
+  const threshold = mean * 0.6;
+
+  const candidates = [];
+  const step = 8; // sample every N pixels for speed
+
+  // Try a range of radii (20% to 48% of min dimension)
+  const minR = Math.floor(Math.min(width, height) * 0.20);
+  const maxR = Math.floor(Math.min(width, height) * 0.48);
+  const radiiToTry = [minR, Math.floor(minR*1.3), Math.floor(minR*1.6),
+                      Math.floor(maxR*0.7), maxR];
+
+  for (const R of radiiToTry) {
+    // Sample perimeter points
+    const perimPoints = Math.max(32, Math.floor(2 * Math.PI * R / 3));
+    const angles = [];
+    for (let i = 0; i < perimPoints; i++) {
+      angles.push(i / perimPoints * 2 * Math.PI);
+    }
+
+    for (let cy = minR + step; cy < height - minR; cy += step) {
+      for (let cx = minR + step; cx < width - minR; cx += step) {
+        let darkCount = 0;
+        for (const angle of angles) {
+          const px = Math.round(cx + Math.cos(angle) * R);
+          const py = Math.round(cy + Math.sin(angle) * R);
+          if (px < 0 || px >= width || py < 0 || py >= height) continue;
+          if (grayData[py * width + px] < threshold) darkCount++;
+        }
+        const score = darkCount / perimPoints;
+        if (score > 0.45) {
+          candidates.push({ cx, cy, r: R, score });
+        }
+      }
+    }
+  }
+
+  // Sort by score, merge nearby candidates
+  candidates.sort((a, b) => b.score - a.score);
+  const merged = [];
+  for (const c of candidates) {
+    const dupe = merged.find(m => Math.hypot(m.cx - c.cx, m.cy - c.cy) < c.r * 0.4);
+    if (!dupe) merged.push(c);
+    if (merged.length >= 5) break;
+  }
+  return merged;
+}
+
+// ── Three-anchor validator ─────────────────────────────────────────────────
+// Checks that the detected circle has the characteristic 3-notch anchor pattern
+// Anchors are at 0°, 120°, 240° and appear as locally denser/darker segments
+function validateAnchorPattern(grayData, width, height, cx, cy, R, threshold) {
+  const scanR = R; // L5 outer ring radius
+  const NUM_PROBES = 72; // sample at 5° intervals
+  const darkness = new Float32Array(NUM_PROBES);
+
+  for (let i = 0; i < NUM_PROBES; i++) {
+    const angle = (i / NUM_PROBES) * 2 * Math.PI - Math.PI / 2;
+    let darkSum = 0, count = 0;
+    // Average over a small angular window
+    for (let da = -2; da <= 2; da++) {
+      const a2 = angle + (da / NUM_PROBES) * 2 * Math.PI;
+      // Sample at 3 radii near the outer ring
+      for (const dr of [-2, 0, 2]) {
+        const r2 = scanR + dr;
+        const px = Math.round(cx + Math.cos(a2) * r2);
+        const py = Math.round(cy + Math.sin(a2) * r2);
+        if (px < 0 || px >= width || py < 0 || py >= height) continue;
+        const gray = grayData[py * width + px];
+        darkSum += (gray < threshold) ? 1 : 0;
+        count++;
+      }
+    }
+    darkness[i] = count > 0 ? darkSum / count : 0;
+  }
+
+  // Find peaks in darkness (anchor clusters)
+  const peaks = [];
+  for (let i = 0; i < NUM_PROBES; i++) {
+    const prev = darkness[(i - 1 + NUM_PROBES) % NUM_PROBES];
+    const next = darkness[(i + 1) % NUM_PROBES];
+    if (darkness[i] > 0.5 && darkness[i] >= prev && darkness[i] >= next) {
+      // Merge with adjacent peaks
+      const last = peaks[peaks.length - 1];
+      if (last && i - last.idx < 4) {
+        if (darkness[i] > last.val) { last.idx = i; last.val = darkness[i]; }
+      } else {
+        peaks.push({ idx: i, val: darkness[i], angle: (i / NUM_PROBES) * 360 });
+      }
+    }
+  }
+
+  // Check if any 3 peaks are roughly 120° apart (±20° tolerance)
+  for (let a = 0; a < peaks.length; a++) {
+    for (let b = a + 1; b < peaks.length; b++) {
+      for (let c = b + 1; c < peaks.length; c++) {
+        const ab = Math.abs(peaks[b].angle - peaks[a].angle);
+        const bc = Math.abs(peaks[c].angle - peaks[b].angle);
+        const ca = 360 - ab - bc;
+        const isTriple = [ab, bc, ca].every(d => Math.abs(d - 120) < 22);
+        if (isTriple) return { valid: true, anchors: [peaks[a], peaks[b], peaks[c]] };
+      }
+    }
+  }
+  return { valid: false };
+}
+
+// ── Bit sampler ────────────────────────────────────────────────────────────
+// Given a confirmed circle, extract the bit matrix from the polar grid
+function sampleBitMatrix(grayData, width, height, cx, cy, totalR, version, threshold) {
+  const cfg = VERSIONS[version];
+  const { sMax, rings, sFloor } = cfg;
+
+  const logoR    = totalR * 0.18;
+  const dataInR  = totalR * 0.25;
+  const dataOutR = totalR * 0.72;
+  const usableR  = dataOutR - dataInR;
+  const ringW    = usableR / rings;
+
+  const matrix = [];
+
+  for (let r = 0; r < rings; r++) {
+    const innerR  = dataInR + r * ringW;
+    const outerR  = dataInR + (r + 1) * ringW - 0.8;
+    const midR    = (innerR + outerR) / 2;
+    const numSect = sectorCount(r + 1, rings, sMax, sFloor);
+    const row     = [];
+    const angStep = (2 * Math.PI) / numSect;
+
+    for (let s = 0; s < numSect; s++) {
+      const angle = s * angStep + angStep / 2 - Math.PI / 2;
+      // Sample multiple points and vote
+      let darkCount = 0, total = 0;
+      for (const dr of [-0.3, 0, 0.3]) {
+        const sampleR = midR * (1 + dr * 0.1) * (totalR / totalR);
+        for (const da of [-0.3, 0, 0.3]) {
+          const a2 = angle + da * angStep * 0.2;
+          const px = Math.round(cx + Math.cos(a2) * sampleR * (totalR / totalR));
+          const py = Math.round(cy + Math.sin(a2) * sampleR * (totalR / totalR));
+          if (px < 0 || px >= width || py < 0 || py >= height) continue;
+          if (grayData[py * width + px] < threshold) darkCount++;
+          total++;
+        }
+      }
+      row.push(total > 0 && (darkCount / total) > 0.4 ? 1 : 0);
+    }
+    matrix.push(row);
+  }
+  return matrix;
+}
+
+// ── Scale-aware sampler ────────────────────────────────────────────────────
+// The detected R is in DOWNSAMPLED coordinates; we scale up when sampling
+function sampleBitMatrixScaled(grayData, gWidth, gHeight, cx, cy, R, version, threshold, scaleX, scaleY) {
+  const cfg = VERSIONS[version];
+  const { sMax, rings, sFloor } = cfg;
+
+  const logoFrac   = 0.18;
+  const dataInFrac = 0.25;
+  const dataOutFrac= 0.72;
+  const usableFrac = dataOutFrac - dataInFrac;
+  const ringFrac   = usableFrac / rings;
+
+  const matrix = [];
+
+  for (let r = 0; r < rings; r++) {
+    const innerFrac = dataInFrac + r * ringFrac;
+    const outerFrac = dataInFrac + (r + 1) * ringFrac;
+    const midFrac   = (innerFrac + outerFrac) / 2;
+    const numSect   = sectorCount(r + 1, rings, sMax, sFloor);
+    const row       = [];
+    const angStep   = (2 * Math.PI) / numSect;
+
+    for (let s = 0; s < numSect; s++) {
+      const angle = s * angStep + angStep / 2 - Math.PI / 2;
+      let darkCount = 0, sampleCount = 0;
+
+      for (const dr of [-0.15, 0, 0.15]) {
+        const sampleR = R * (midFrac + dr * ringFrac);
+        for (const da of [-0.25, 0, 0.25]) {
+          const a2 = angle + da * angStep;
+          const px = Math.round(cx + Math.cos(a2) * sampleR);
+          const py = Math.round(cy + Math.sin(a2) * sampleR);
+          if (px < 0 || px >= gWidth || py < 0 || py >= gHeight) continue;
+          if (grayData[py * gWidth + px] < threshold) darkCount++;
+          sampleCount++;
+        }
+      }
+      row.push(sampleCount > 0 && (darkCount / sampleCount) > 0.38 ? 1 : 0);
+    }
+    matrix.push(row);
+  }
+  return matrix;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SCAN LOOP
+// ═══════════════════════════════════════════════════════════════════════════
+
+const video   = document.getElementById('video');
+const canvas  = document.getElementById('proc-canvas');
+const ctx     = canvas.getContext('2d', { willReadFrequently: true });
+
+// Processing resolution (kept low for speed)
+const PROC_W = 320;
+const PROC_H = 240;
+
+let scanning     = false;
+let frameCount   = 0;
+let lastFpsTime  = performance.now();
+let fps          = 0;
+let resultFound  = false;
+let animFrame    = null;
+
+const VNAMES = Object.keys(VERSIONS);
+
+function setStatus(msg, cls = 'searching') {
+  const el = document.getElementById('status-text');
+  el.textContent = msg;
+  el.className = 'status-text ' + cls;
+}
+
+function showResult(payload, confidence) {
+  resultFound = true;
+  // Flash
+  const fl = document.getElementById('flash');
+  fl.classList.add('show');
+  setTimeout(() => fl.classList.remove('show'), 300);
+
+  document.getElementById('result-url').textContent = payload;
+  document.getElementById('confirm-row').classList.add('visible');
+  document.getElementById('scan-line').style.animationPlayState = 'paused';
+  setStatus(`✓ Code found  (${confidence}% match)`, 'found');
+
+  document.getElementById('open-btn').onclick = () => {
+    if (payload.startsWith('http')) window.open(payload, '_blank');
+    else { navigator.clipboard?.writeText(payload); setStatus('Copied to clipboard', 'found'); }
+  };
+}
+
+function dismissResult() {
+  resultFound = false;
+  document.getElementById('confirm-row').classList.remove('visible');
+  document.getElementById('scan-line').style.animationPlayState = 'running';
+  setStatus('Searching for ORBIS code…', 'searching');
+}
+
+function processFrame() {
+  if (!scanning) return;
+
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime > 800) {
+    fps = Math.round(frameCount / ((now - lastFpsTime) / 1000));
+    frameCount = 0;
+    lastFpsTime = now;
+    document.getElementById('fps-counter').textContent = fps + ' fps';
+  }
+
+  if (resultFound) { animFrame = requestAnimationFrame(processFrame); return; }
+
+  // Draw video frame to processing canvas
+  canvas.width  = PROC_W;
+  canvas.height = PROC_H;
+  ctx.drawImage(video, 0, 0, PROC_W, PROC_H);
+  const imgData = ctx.getImageData(0, 0, PROC_W, PROC_H);
+
+  // Build grayscale
+  const grayData = new Uint8Array(PROC_W * PROC_H);
+  let gSum = 0;
+  for (let i = 0; i < PROC_W * PROC_H; i++) {
+    grayData[i] = toGray(imgData.data[i*4], imgData.data[i*4+1], imgData.data[i*4+2]);
+    gSum += grayData[i];
+  }
+  const gMean = gSum / grayData.length;
+  const threshold = gMean * 0.58;
+
+  // Detect circles
+  const circles = detectCircles({ data: imgData.data }, PROC_W, PROC_H);
+  document.getElementById('circles-found').textContent = circles.length + ' candidates';
+  document.getElementById('scan-count').textContent = (parseInt(document.getElementById('scan-count').textContent) || 0) + 1 + ' frames';
+
+  if (circles.length === 0) {
+    setStatus('Searching for ORBIS code…', 'searching');
+    animFrame = requestAnimationFrame(processFrame);
+    return;
+  }
+
+  setStatus('Circular pattern detected — validating…', 'detecting');
+
+  // Try each candidate circle with each version
+  for (const circ of circles) {
+    // Validate anchor pattern
+    const anchor = validateAnchorPattern(grayData, PROC_W, PROC_H, circ.cx, circ.cy, circ.r, threshold);
+
+    for (const version of VNAMES) {
+      const sampled = sampleBitMatrixScaled(
+        grayData, PROC_W, PROC_H,
+        circ.cx, circ.cy, circ.r,
+        version, threshold, 1, 1
+      );
+
+      // Try lookup by similarity against all registered codes
+      const result = lookupBySimilarity(sampled, version);
+      if (result) {
+        showResult(result.payload, result.confidence);
+        animFrame = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      // Also try exact fingerprint
+      const fp = fingerprintMatrix(sampled);
+      const exact = lookupFingerprint(fp);
+      if (exact) {
+        showResult(exact.payload, 99);
+        animFrame = requestAnimationFrame(processFrame);
+        return;
+      }
+    }
+  }
+
+  setStatus('Pattern found — reading data…', 'detecting');
+  animFrame = requestAnimationFrame(processFrame);
+}
+
+// ── Process a static image (for upload flow) ──────────────────────────────
+function processImage(imageEl) {
+  const w = imageEl.naturalWidth  || imageEl.width;
+  const h = imageEl.naturalHeight || imageEl.height;
+  const scale = Math.min(PROC_W / w, PROC_H / h);
+  const pw = Math.floor(w * scale);
+  const ph = Math.floor(h * scale);
+
+  canvas.width  = pw;
+  canvas.height = ph;
+  ctx.drawImage(imageEl, 0, 0, pw, ph);
+  const imgData = ctx.getImageData(0, 0, pw, ph);
+
+  const grayData = new Uint8Array(pw * ph);
+  let gSum = 0;
+  for (let i = 0; i < pw * ph; i++) {
+    grayData[i] = toGray(imgData.data[i*4], imgData.data[i*4+1], imgData.data[i*4+2]);
+    gSum += grayData[i];
+  }
+  const threshold = (gSum / grayData.length) * 0.58;
+  const circles = detectCircles({ data: imgData.data }, pw, ph);
+
+  setStatus(`Found ${circles.length} circle candidate(s) — decoding…`, 'detecting');
+
+  for (const circ of circles) {
+    for (const version of VNAMES) {
+      const sampled = sampleBitMatrixScaled(grayData, pw, ph, circ.cx, circ.cy, circ.r, version, threshold, 1, 1);
+      const result = lookupBySimilarity(sampled, version);
+      if (result) { showResult(result.payload, result.confidence); return; }
+      const fp = fingerprintMatrix(sampled);
+      const exact = lookupFingerprint(fp);
+      if (exact) { showResult(exact.payload, 99); return; }
+    }
+  }
+
+  setStatus(circles.length > 0 ? 'Code found but not registered on this device' : 'No ORBIS code detected in image', 'error');
+}
+
+// ── Camera startup ──────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+    scanning = true;
+    document.getElementById('permission-gate').classList.add('hidden');
+    setStatus('Searching for ORBIS code…', 'searching');
+    processFrame();
+  } catch (err) {
+    setStatus('Camera access denied. Use image upload instead.', 'error');
+    console.warn('Camera error:', err);
+  }
+}
+
+// ── Event bindings ──────────────────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', startCamera);
+
+document.getElementById('img-upload').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('permission-gate').classList.add('hidden');
+  setStatus('Loading image…', 'detecting');
+  const img = new Image();
+  img.onload = () => processImage(img);
+  img.src = URL.createObjectURL(file);
+});
+
+document.getElementById('dismiss-btn').addEventListener('click', dismissResult);
+
+// Auto-start if already have permissions
+navigator.permissions?.query({ name: 'camera' }).then(p => {
+  if (p.state === 'granted') startCamera();
+}).catch(() => {});
+</script>
+</body>
+</html>
