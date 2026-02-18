@@ -1,949 +1,1104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ORBIS — Circular Code Generator v3.0</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>QR_studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --a:#b8f400;
+  --a10:rgba(184,244,0,.10);
+  --a20:rgba(184,244,0,.20);
+  --dark:#090b08;
+  --card:#0f1210;
+  --card2:#131714;
+  --bord:rgba(184,244,0,.09);
+  --bord2:rgba(255,255,255,.06);
+  --mut:rgba(255,255,255,.30);
+  --danger:#ff4455;
+  --warn:#ffa040;
+}
+html{scroll-behavior:smooth}
+body{background:var(--dark);color:#e4ebe0;font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* inputs */
+input,textarea,select{
+  font-family:inherit;background:rgba(255,255,255,.025);
+  border:1px solid var(--bord2);border-radius:8px;
+  color:#e4ebe0;padding:9px 12px;font-size:14px;width:100%;
+  outline:none;transition:border-color .15s,box-shadow .15s;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--a);box-shadow:0 0 0 3px rgba(184,244,0,.06)}
+input::placeholder,textarea::placeholder{color:rgba(255,255,255,.16)}
+option{background:#141a12}
+textarea{resize:vertical;min-height:68px}
+button{cursor:pointer;font-family:inherit;border:none;transition:all .15s}
+button:active{transform:scale(.96)}
+input[type=range]{padding:0;background:none;border:none;accent-color:var(--a);cursor:pointer;height:4px}
+input[type=range]:focus{box-shadow:none;border:none}
+input[type=color]{padding:2px;border:none;background:none;cursor:pointer;width:100%;height:100%}
 
-  :root {
-    --ink:     #0a0a0f;
-    --paper:   #f5f2eb;
-    --accent:  #1a1aff;
-    --mid:     #3d3d8a;
-    --muted:   #8a8a9a;
-    --border:  #d8d4c8;
-    --warm:    #fff8f0;
-    --scan:    #ff3b00;
-    --ok:      #00c853;
-  }
+/* animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes scanline{0%{top:-4px}100%{top:calc(100% + 4px)}}
 
-  html, body {
-    height: 100%;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 400;
-  }
+/* layout */
+header{
+  position:sticky;top:0;z-index:100;
+  border-bottom:1px solid var(--bord);
+  background:rgba(9,11,8,.92);
+  backdrop-filter:blur(20px);
+  padding:0 24px;
+}
+.hdr-inner{max-width:1100px;margin:0 auto;height:54px;display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none}
+.logo-box{width:28px;height:28px;background:var(--a);border-radius:6px;display:grid;place-items:center;font-size:13px;flex-shrink:0}
+.logo-name{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;letter-spacing:-1px;color:#e4ebe0}
+.logo-name span{color:var(--a)}
+.hdr-badge{font-family:'Space Mono',monospace;font-size:10px;color:rgba(184,244,0,.45);letter-spacing:2px;border:1px solid var(--bord);padding:4px 10px;border-radius:20px}
 
-  .shell {
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto 1fr auto;
-  }
+.main{max-width:1100px;margin:0 auto;padding:24px 24px 60px}
+.grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
 
-  header {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: baseline;
-    gap: 1.5rem;
-    padding: 2rem 3rem 1.5rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .logo-word {
-    font-family: 'DM Serif Display', serif;
-    font-size: 2.2rem;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    line-height: 1;
-  }
-  .logo-word em { color: var(--accent); font-style: italic; }
-  .tagline {
-    font-size: 0.8rem;
-    color: var(--muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 500;
-    padding-top: 0.15rem;
-  }
-  .version-badge {
-    margin-left: auto;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    color: var(--ok);
-    border: 1px solid var(--ok);
-    padding: 0.25rem 0.6rem;
-    border-radius: 2px;
-    letter-spacing: 0.06em;
-  }
+/* section */
+.sec{background:var(--card);border:1px solid var(--bord);border-radius:14px;padding:20px}
+.sec+.sec{margin-top:14px}
+.sec-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px}
 
-  .panel-left {
-    padding: 2.5rem 3rem;
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
+/* type selector */
+.type-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:0}
+@media(max-width:600px){.type-grid{grid-template-columns:repeat(4,1fr)}}
+.type-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:9px;border:1px solid var(--bord2);background:transparent;color:var(--mut);font-size:11px;font-weight:600}
+.type-btn .ico{font-size:16px}
+.type-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
+.type-btn:hover:not(.on){border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.6)}
 
-  .field-group { display: flex; flex-direction: column; gap: 0.5rem; }
-  .field-label {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-weight: 600;
-    color: var(--muted);
-  }
-  .field-label span { color: var(--scan); }
+/* form */
+.lbl{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:rgba(255,255,255,.24);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
+.fld{margin-bottom:12px}
+.fld:last-child{margin-bottom:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-  .url-input {
-    width: 100%;
-    background: white;
-    border: 1.5px solid var(--border);
-    border-radius: 4px;
-    padding: 0.85rem 1rem;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.85rem;
-    color: var(--ink);
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  .url-input:focus { border-color: var(--accent); }
-  .url-input::placeholder { color: var(--muted); }
+/* customize tabs */
+.ctabs{display:flex;gap:2px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);border-radius:8px;padding:3px;margin-bottom:16px}
+.ctab{flex:1;padding:6px 0;border-radius:6px;border:none;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;background:transparent;color:rgba(255,255,255,.26);text-transform:uppercase;letter-spacing:1px}
+.ctab.on{background:var(--a);color:var(--dark)}
 
-  /* Capacity bar */
-  .capacity-indicator {
-    background: white;
-    border: 1.5px solid var(--border);
-    border-radius: 4px;
-    padding: 0.75rem 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .capacity-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.75rem;
-  }
-  .capacity-used {
-    color: var(--ink);
-    font-weight: 600;
-  }
-  .capacity-auto-badge {
-    background: var(--accent);
-    color: white;
-    padding: 0.2rem 0.5rem;
-    border-radius: 3px;
-    font-size: 0.65rem;
-    letter-spacing: 0.05em;
-  }
-  .capacity-bar-track {
-    height: 8px;
-    background: #e0e0e0;
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .capacity-bar-fill {
-    height: 100%;
-    background: var(--ok);
-    border-radius: 4px;
-    transition: width 0.3s, background 0.3s;
-  }
-  .capacity-bar-fill.warning { background: #ff9800; }
-  .capacity-bar-fill.error { background: var(--scan); }
+/* style options */
+.shape-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:16px}
+.shape-btn{padding:9px 5px;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:11px;font-weight:600}
+.shape-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
+.eye-row{display:flex;gap:6px}
+.eye-btn{flex:1;padding:9px 5px;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:11px;font-weight:600}
+.eye-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
 
-  /* Color presets */
-  .color-presets {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.5rem;
-  }
-  .color-preset {
-    aspect-ratio: 1;
-    border: 2px solid var(--border);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s;
-    position: relative;
-    overflow: hidden;
-  }
-  .color-preset:hover {
-    transform: scale(1.05);
-    border-color: var(--accent);
-  }
-  .color-preset.active {
-    border-color: var(--accent);
-    border-width: 3px;
-  }
-  .color-preset-inner {
-    width: 100%;
-    height: 100%;
-    display: flex;
-  }
-  .color-preset-fg {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-  }
-  .color-preset-bg {
-    flex: 1;
-  }
+/* colors */
+.tpl-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px}
+.tpl{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.4);font-size:11px;font-weight:600}
+.tpl:hover{border-color:rgba(255,255,255,.18)}
+.c-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.c-lbl{font-size:13px;color:var(--mut)}
+.c-ctrl{display:flex;align-items:center;gap:7px}
+.swatch{width:28px;height:28px;border-radius:5px;border:2px solid rgba(255,255,255,.1);position:relative;overflow:hidden;cursor:pointer;flex-shrink:0}
+.hex{width:78px;font-size:12px;font-family:'Space Mono',monospace;padding:4px 7px}
+.tog-row{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.tog{width:34px;height:18px;border-radius:9px;background:rgba(255,255,255,.08);position:relative;cursor:pointer;transition:background .18s;flex-shrink:0;border:none;padding:0;display:block}
+.tog.on{background:var(--a)}
+.tog-k{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .18s;pointer-events:none}
+.tog.on .tog-k{left:18px}
+.tog-lbl{font-size:13px;color:var(--mut);cursor:pointer;user-select:none}
 
-  .advanced-toggle {
-    background: none;
-    border: none;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    text-align: left;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    transition: color 0.2s;
-  }
-  .advanced-toggle:hover { color: var(--accent); }
+/* advanced */
+.ec-row{display:flex;gap:6px;margin-bottom:5px}
+.ecb{flex:1;padding:8px 0;border-radius:7px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-weight:700;font-size:13px;font-family:'Space Mono',monospace}
+.ecb.on{border-color:var(--a);background:var(--a);color:var(--dark)}
+.ecb.clamped{border-color:rgba(184,244,0,.4);color:var(--a)}
+.ec-hint{font-size:10px;color:rgba(255,255,255,.16);font-family:'Space Mono',monospace;margin-bottom:18px}
+.logo-up{width:100%;padding:16px;border-radius:9px;background:var(--a10);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--a);outline:2px dashed var(--bord);border:none}
+.logo-up:hover{background:var(--a20)}
+.logo-prev{display:flex;align-items:center;gap:10px}
+.logo-img{width:44px;height:44px;object-fit:contain;border-radius:7px;border:1px solid rgba(255,255,255,.08);background:#fff}
+.logo-rm{width:26px;height:26px;border-radius:5px;border:none;background:rgba(255,68,85,.12);color:var(--danger);display:grid;place-items:center;font-size:16px;flex-shrink:0}
 
-  .advanced-section {
-    display: none;
-    animation: slideDown 0.3s;
-  }
-  .advanced-section.visible { display: block; }
+/* scan status — categorical only */
+.scan-box{margin-top:18px;padding:13px 15px;border-radius:9px;border:1px solid}
+.scan-box.good{border-color:rgba(184,244,0,.22);background:rgba(184,244,0,.04)}
+.scan-box.caution{border-color:rgba(255,160,64,.22);background:rgba(255,160,64,.04)}
+.scan-box.bad{border-color:rgba(255,68,85,.22);background:rgba(255,68,85,.04)}
+.scan-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.scan-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.scan-title{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px}
+.scan-items{display:flex;flex-direction:column;gap:4px}
+.scan-item{font-size:11px;color:rgba(255,255,255,.36);display:flex;align-items:flex-start;gap:6px;line-height:1.5}
 
-  @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+/* quiet zone hint — phone camera specific */
+.qz-notice{margin-top:10px;padding:8px 10px;border-radius:7px;background:rgba(184,244,0,.04);border:1px solid var(--bord);font-size:11px;color:rgba(255,255,255,.3);line-height:1.6}
+.qz-notice strong{color:rgba(184,244,0,.6);font-weight:600}
 
-  .ring-selector { 
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.4rem;
-  }
-  .ring-btn {
-    padding: 0.5rem 0.3rem;
-    background: white;
-    border: 1.5px solid var(--border);
-    border-radius: 4px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: var(--muted);
-    cursor: pointer;
-    transition: all 0.15s;
-    text-align: center;
-  }
-  .ring-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .ring-btn.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: white;
-  }
+/* preview panel */
+.preview-wrap{position:sticky;top:68px}
+.prev-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.prev-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase}
 
-  .logo-input {
-    width: 100%;
-    background: white;
-    border: 1.5px solid var(--border);
-    border-radius: 4px;
-    padding: 0.7rem 0.9rem;
-    font-family: 'DM Serif Display', serif;
-    font-size: 1.1rem;
-    color: var(--ink);
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  .logo-input:focus { border-color: var(--accent); }
+/* QR mount — persistent, never recreated */
+#qr-mount{
+  display:flex;justify-content:center;align-items:center;
+  min-height:280px;border-radius:11px;overflow:hidden;
+  margin-bottom:14px;transition:box-shadow .25s,background .25s;
+  position:relative;
+}
+#qr-mount.empty{background:rgba(255,255,255,.018);outline:2px dashed var(--bord)}
+#qr-mount.pass{box-shadow:0 0 0 2px var(--a),0 0 32px rgba(184,244,0,.10)}
+#qr-mount.fail{box-shadow:0 0 0 2px var(--danger),0 0 32px rgba(255,68,85,.08)}
 
-  .gen-btn {
-    width: 100%;
-    padding: 1rem;
-    background: var(--ink);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.9rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
-  }
-  .gen-btn:hover { background: var(--accent); }
-  .gen-btn:active { transform: scale(0.99); }
-  .gen-btn:disabled {
-    background: var(--muted);
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
+/* scanline animation shown while verifying */
+.scanline-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:11px}
+.scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--a),transparent);animation:scanline 1.2s ease-in-out infinite;opacity:.7}
 
-  .dl-row { display: flex; gap: 0.75rem; }
-  .dl-btn {
-    flex: 1;
-    padding: 0.65rem;
-    background: white;
-    border: 1.5px solid var(--border);
-    border-radius: 4px;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--ink);
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.15s;
-    text-decoration: none;
-    display: block;
-  }
-  .dl-btn:hover { border-color: var(--ink); }
+.empty-hint{text-align:center;color:rgba(184,244,0,.16)}
+.empty-hint .big{font-size:48px;margin-bottom:10px;filter:grayscale(1)}
+.empty-hint .txt{font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px}
 
-  .info-box {
-    padding: 0.75rem 1rem;
-    background: var(--warm);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    color: var(--muted);
-    line-height: 1.8;
-  }
-  .info-box strong { color: var(--ink); }
-  .info-box.success {
-    background: rgba(0, 200, 83, 0.08);
-    border-color: rgba(0, 200, 83, 0.25);
-    color: var(--ok);
-  }
+/* verify badge */
+.vbadge{font-size:10px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:5px}
+.vbadge.pass{color:var(--a)}
+.vbadge.fail{color:var(--danger)}
+.vbadge.checking{color:rgba(184,244,0,.45)}
 
-  .panel-right {
-    padding: 2.5rem 3rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1.5rem;
-    background: white;
-  }
+/* actions */
+.dl-row{display:flex;gap:7px;margin-bottom:7px}
+.btn-main{flex:1;padding:10px 0;border-radius:9px;border:none;background:var(--a);color:var(--dark);font-weight:700;font-size:13px;font-family:'Syne',sans-serif}
+.btn-out{flex:1;padding:10px 0;border-radius:9px;border:1px solid var(--bord);background:transparent;color:var(--a);font-weight:700;font-size:13px}
+.cp-row{display:flex;gap:7px;margin-bottom:12px}
+.btn-g{flex:1;padding:8px 0;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:12px;font-weight:600}
+.btn-g.done{background:var(--a10);color:var(--a)}
+.data-chip{padding:8px 10px;border-radius:7px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.05);font-size:10px;font-family:'Space Mono',monospace;color:rgba(255,255,255,.2);word-break:break-all;max-height:48px;overflow-y:auto;line-height:1.6}
 
-  .orbis-canvas {
-    width: 340px;
-    height: 340px;
-    position: relative;
-  }
-  .orbis-canvas svg {
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 8px 32px rgba(0,0,0,0.12));
-    border-radius: 50%;
-    overflow: visible;
-  }
+/* phone camera tip */
+.cam-tip{margin-top:12px;padding:10px 12px;border-radius:8px;border:1px solid var(--bord);background:var(--a10);font-size:11px;color:rgba(184,244,0,.55);font-family:'Space Mono',monospace;line-height:1.6;text-align:center}
 
-  .scan-label {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--muted);
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .scan-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--scan); animation: pulse 1.8s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
-
-  .empty-state {
-    text-align: center;
-    color: var(--muted);
-  }
-  .empty-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.3;
-  }
-  .empty-state p { font-size: 0.85rem; line-height: 1.6; }
-
-  footer {
-    grid-column: 1 / -1;
-    padding: 1rem 3rem;
-    border-top: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .footer-note {
-    font-size: 0.72rem;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-  }
-  .footer-link {
-    font-size: 0.72rem;
-    color: var(--accent);
-    text-decoration: none;
-    font-family: 'DM Mono', monospace;
-  }
-
-  @media (max-width: 720px) {
-    .shell { grid-template-columns: 1fr; }
-    .panel-left { border-right: none; border-bottom: 1px solid var(--border); padding: 1.5rem; }
-    .panel-right { padding: 2rem 1.5rem; }
-    header { padding: 1.5rem; flex-wrap: wrap; }
-    footer { flex-direction: column; gap: 0.5rem; text-align: center; }
-    .orbis-canvas { width: 280px; height: 280px; }
-  }
+/* toast */
+#toasts{position:fixed;top:66px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.toast{padding:10px 15px;border-radius:10px;font-size:12px;font-weight:600;animation:toastIn .2s ease;display:flex;align-items:center;gap:7px;backdrop-filter:blur(16px);pointer-events:all}
+.toast.ok{background:rgba(184,244,0,.13);border:1px solid rgba(184,244,0,.22);color:var(--a)}
+.toast.er{background:rgba(255,68,85,.13);border:1px solid rgba(255,68,85,.22);color:var(--danger)}
+.toast.wn{background:rgba(255,160,64,.13);border:1px solid rgba(255,160,64,.22);color:var(--warn)}
 </style>
 </head>
 <body>
-
-<div class="shell">
-
-  <header>
-    <div class="logo-word"><em>O</em>RBIS</div>
-    <div class="tagline">Smart circular codes v3.0</div>
-    <div class="version-badge">AUTO</div>
-  </header>
-
-  <div class="panel-left">
-
-    <div class="field-group">
-      <label class="field-label" for="url-input">URL or Text <span>*</span></label>
-      <input class="url-input" id="url-input" type="text"
-        placeholder="Enter text or URL..."
-        value="orbis.design">
-    </div>
-
-    <div class="capacity-indicator">
-      <div class="capacity-header">
-        <span class="capacity-used" id="capacity-text">12 / 15 bytes</span>
-        <span class="capacity-auto-badge" id="auto-badge">AUTO: LITE</span>
-      </div>
-      <div class="capacity-bar-track">
-        <div class="capacity-bar-fill" id="capacity-bar" style="width: 80%"></div>
-      </div>
-    </div>
-
-    <div class="field-group">
-      <div class="field-label">Color Style</div>
-      <div class="color-presets">
-        <div class="color-preset active" data-fg="#0a0a0f" data-bg="#f5f2eb" title="Classic (Black on Cream)">
-          <div class="color-preset-inner">
-            <div class="color-preset-fg" style="background: #f5f2eb; color: #0a0a0f;">◎</div>
-            <div class="color-preset-bg" style="background: #0a0a0f;"></div>
-          </div>
-        </div>
-        <div class="color-preset" data-fg="#1a1aff" data-bg="#ffffff" title="Blue (High Contrast)">
-          <div class="color-preset-inner">
-            <div class="color-preset-fg" style="background: #ffffff; color: #1a1aff;">◎</div>
-            <div class="color-preset-bg" style="background: #1a1aff;"></div>
-          </div>
-        </div>
-        <div class="color-preset" data-fg="#000000" data-bg="#ffffff" title="Pure (Black & White)">
-          <div class="color-preset-inner">
-            <div class="color-preset-fg" style="background: #ffffff; color: #000000;">◎</div>
-            <div class="color-preset-bg" style="background: #000000;"></div>
-          </div>
-        </div>
-        <div class="color-preset" data-fg="#00c853" data-bg="#0a0a0f" title="Tech (Green on Dark)">
-          <div class="color-preset-inner">
-            <div class="color-preset-fg" style="background: #0a0a0f; color: #00c853;">◎</div>
-            <div class="color-preset-bg" style="background: #00c853;"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <button class="advanced-toggle" id="advanced-toggle">▼ Advanced Options</button>
-
-    <div class="advanced-section" id="advanced-section">
-      <div class="field-group">
-        <div class="field-label">Manual Version Override</div>
-        <div class="ring-selector">
-          <button class="ring-btn" data-version="lite">Lite<br><small>17B</small></button>
-          <button class="ring-btn" data-version="standard">Std<br><small>34B</small></button>
-          <button class="ring-btn" data-version="pro">Pro<br><small>56B</small></button>
-          <button class="ring-btn" data-version="ultra">Ultra<br><small>83B</small></button>
-          <button class="ring-btn" data-version="mega">Mega<br><small>117B</small></button>
-        </div>
-      </div>
-
-      <div class="field-group">
-        <label class="field-label" for="logo-input">Centre Logo (1-3 chars)</label>
-        <input class="logo-input" id="logo-input" type="text" maxlength="3"
-          placeholder="◎" value="◎">
-      </div>
-    </div>
-
-    <button class="gen-btn" id="gen-btn">Generate ORBIS</button>
-
-    <div class="dl-row">
-      <a class="dl-btn" id="dl-svg" href="#" download="orbis.svg">↓ SVG</a>
-      <a class="dl-btn" id="dl-png" href="#" download="orbis.png">↓ PNG</a>
-    </div>
-
-    <div class="info-box success">
-      <strong>✓ Smart Features Active</strong><br>
-      • Auto version selection<br>
-      • High contrast enforced<br>
-      • White border included
-    </div>
-
-    <a href="orbis-scanner-v3.html" style="display:block;width:100%;padding:0.7rem;text-align:center;border:1.5px solid var(--border);border-radius:4px;font-family:'DM Mono',monospace;font-size:0.8rem;color:var(--ink);text-decoration:none;background:white;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink)'">&#9678; Open Scanner &rarr;</a>
-
-  </div>
-
-  <div class="panel-right">
-    <div class="orbis-canvas" id="orbis-canvas">
-      <div class="empty-state">
-        <div class="empty-icon">◎</div>
-        <p>Your ORBIS code<br>will appear here</p>
-      </div>
-    </div>
-    <div class="scan-label">
-      <div class="scan-dot"></div>
-      Point camera here to scan
-    </div>
-  </div>
-
-  <footer>
-    <span class="footer-note">ORBIS v3.0 — Auto-optimized · Smart defaults · Universal scanning</span>
-    <a class="footer-link" href="#" target="_blank">github.com/orbis-code</a>
-  </footer>
-
-</div>
+<div id="root"></div>
+<div id="toasts"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════════════
-//  ORBIS GENERATOR V3.0 — Smart Defaults & Auto-Optimization
-// ═══════════════════════════════════════════════════════════════════════════
+"use strict";
+/* ══════════════════════════════════════════════════════════════════════
+   QR STUDIO v4  —  Encode-only. Lightning fast. Phone-camera optimized.
 
-const VERSIONS = {
-  lite:     { rings: 10, sMax: 32, sFloor: 10, dataBytes: 17 },
-  standard: { rings: 16, sMax: 40, sFloor: 12, dataBytes: 34 },
-  pro:      { rings: 22, sMax: 48, sFloor: 14, dataBytes: 56 },
-  ultra:    { rings: 28, sMax: 56, sFloor: 16, dataBytes: 83 },
-  mega:     { rings: 35, sMax: 64, sFloor: 18, dataBytes: 117 },
+   Speed strategy:
+   • qr-code-styling loaded once, instance reused via .update() — no flicker
+   • MutationObserver replaces 900ms dead-wait timer for autoVerify
+   • ZXing used ONLY for autoVerify (one lightweight read-back)
+   • Form section is a persistent DOM node — inputs never recreated → no focus loss
+   • No decode tab, no decode UI, no drag/drop, no history
+
+   Phone camera readability:
+   • Default EC = H (30% data recovery — best for styled QR)
+   • Minimum 16px quiet zone margin enforced
+   • Gradient on dots DISABLED by default (hurts local contrast for scanners)
+   • Contrast checked with QR-scanner thresholds, not WCAG text thresholds
+   • Dot size warning if QR would be too dense for phone cameras
+   • Canvas verify via ZXing — honest disclaimer shown always
+══════════════════════════════════════════════════════════════════════ */
+
+/* ── Script loader — promise-deduplicated ─────────────────────────── */
+const _sc = new Map();
+function loadScript(src) {
+  if (_sc.has(src)) return _sc.get(src);
+  const p = new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = ok;
+    s.onerror = () => { _sc.delete(src); fail(new Error("Load failed: " + src)); };
+    document.head.appendChild(s);
+  });
+  _sc.set(src, p);
+  return p;
+}
+
+/* ── QR lib — styling first, raw fallback — loaded once ───────────── */
+let _qlP = null;
+function ensureQRLib() {
+  if (!_qlP) _qlP = loadScript("https://unpkg.com/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js")
+    .catch(() => loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"))
+    .catch(() => { throw new Error("No QR library available"); });
+  return _qlP;
+}
+
+/* ── ZXing — loaded once, used only for autoVerify ────────────────── */
+let _zxP = null;
+function ensureZXing() {
+  if (!_zxP) _zxP = loadScript("https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js")
+    .then(() => { if (!window.ZXing) throw new Error("ZXing unavailable"); return window.ZXing; })
+    .catch(e => { _zxP = null; throw e; });
+  return _zxP;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────── */
+function toast(msg, type = "ok", ms = 2600) {
+  const c = document.getElementById("toasts");
+  const el = document.createElement("div");
+  el.className = "toast " + type;
+  el.innerHTML = `<span>${{ ok: "✓", er: "✕", wn: "⚠" }[type] || "•"}</span><span>${msg}</span>`;
+  c.appendChild(el);
+  setTimeout(() => { el.style.cssText = "opacity:0;transform:translateX(28px);transition:.18s"; setTimeout(() => el.remove(), 220); }, ms);
+}
+
+/* ── Unified QR escaping ─────────────────────────────────────────── */
+function qrEsc(v, mode = "vcard") {
+  let s = (v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/"/g, '\\"');
+  if (mode === "wifi") s = s.replace(/:/g, "\\:");
+  return s;
+}
+
+/* ── Data builder ─────────────────────────────────────────────────── */
+function buildData(type, f) {
+  switch (type) {
+    case "url": {
+      let u = (f.url || "").trim();
+      if (u && !/^https?:\/\//i.test(u)) u = "https://" + u;
+      return u;
+    }
+    case "text":  return f.text || "";
+    case "email": return `mailto:${f.email || ""}?subject=${encodeURIComponent(f.subject || "")}&body=${encodeURIComponent(f.body || "")}`;
+    case "sms":   return `sms:${f.phone || ""}${f.message ? `?body=${encodeURIComponent(f.message)}` : ""}`;
+    case "phone": return `tel:${f.phone || ""}`;
+    case "wifi":  return `WIFI:T:${f.security || "WPA"};S:${qrEsc(f.ssid, "wifi")};P:${qrEsc(f.password, "wifi")};;`;
+    case "vcard": {
+      // FIX: join non-empty parts only — no leading space when first name missing
+      const fn = [f.firstName, f.lastName].filter(Boolean).map(v => qrEsc(v)).join(" ");
+      return [
+        "BEGIN:VCARD", "VERSION:3.0",
+        `FN:${fn}`,
+        `N:${qrEsc(f.lastName || "")};${qrEsc(f.firstName || "")};;;`,
+        `ORG:${qrEsc(f.org || "")}`,
+        // TEL, EMAIL, URL: NOT vCard text fields — no escaping, just sanitize format
+        `TEL:${(f.phone || "").replace(/[^\d+\-().\ ]/g, "")}`,
+        `EMAIL:${(f.email || "").trim()}`,
+        `URL:${(f.website || "").trim()}`,
+        `ADR:;;${qrEsc(f.address || "")};;;;`,
+        "END:VCARD"
+      ].join("\n");
+    }
+    default: return "";
+  }
+}
+
+/* ── 3-digit hex expansion → correct contrast math ───────────────── */
+function expandHex(hex) {
+  hex = (hex || "").trim().replace(/^#/, "");
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  return hex.length === 6 ? "#" + hex : null;
+}
+function hexLum(hex) {
+  const h = expandHex(hex); if (!h) return 0;
+  const r = parseInt(h.slice(1,3),16)/255, g = parseInt(h.slice(3,5),16)/255, b = parseInt(h.slice(5,7),16)/255;
+  const lin = x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4);
+  return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b);
+}
+function cr(fg, bg) {
+  const l1 = hexLum(fg), l2 = hexLum(bg);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+/* ── Categorical scan status (QR scanner thresholds, not WCAG) ────── */
+function scanStatus(fg, bg, ecLevel, logoSize, dataLen, hasMargin, useGrad) {
+  const ratio = cr(fg, bg);
+  const reasons = [];
+  let bad = 0, caution = 0;
+
+  // QR scanner contrast thresholds are different from WCAG text
+  // Phone cameras need ~3:1 minimum, work best above 4.5:1
+  if (ratio < 2.5) { bad++; reasons.push({ sev:"bad", msg: `Contrast ${ratio.toFixed(1)}:1 — too low for most phone cameras` }); }
+  else if (ratio < 4)  { caution++; reasons.push({ sev:"caution", msg: `Contrast ${ratio.toFixed(1)}:1 — may fail in poor lighting` }); }
+
+  // Gradient hurts local contrast for scanners even if overall contrast is ok
+  if (useGrad) { caution++; reasons.push({ sev:"caution", msg: "Gradient dots reduce local contrast — phone cameras prefer solid foreground" }); }
+
+  // EC + logo
+  if (logoSize > 0 && ecLevel === "L") { bad++; reasons.push({ sev:"bad", msg: "Logo with L correction will be unreadable — use H" }); }
+  else if (logoSize > 0 && ecLevel === "M") { caution++; reasons.push({ sev:"caution", msg: "Logo with M correction is risky — use Q or H" }); }
+  if (logoSize > 30) { caution++; reasons.push({ sev:"caution", msg: "Logo covers >30% — data may be obscured" }); }
+
+  // Dense data
+  if (dataLen > 300) { caution++; reasons.push({ sev:"caution", msg: "Long data creates dense modules — test carefully on phone" }); }
+
+  // Quiet zone — critical for phone camera detection
+  if (!hasMargin) { bad++; reasons.push({ sev:"bad", msg: "No quiet zone — phone cameras need white border to locate the QR" }); }
+
+  const level = bad > 0 ? "bad" : caution > 0 ? "caution" : "good";
+  return { level, label: { good:"Camera Ready", caution:"Some Concerns", bad:"Will Likely Fail" }[level], reasons };
+}
+
+/* ── localStorage — quota-guarded ────────────────────────────────── */
+function lsGet(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { if (e.name==="QuotaExceededError"||e.code===22) toast("Storage full","wn"); } }
+
+/* ═══════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════ */
+const S = {
+  qrType: "url",
+  fields: lsGet("qrs_fields_url", {}),
+  dotType: "square",
+  eyeRadius: "square",
+  fgColor: "#b8f400",
+  bgColor: "#0c0f0a",
+  useGrad: false,
+  gradEnd: "#00ff88",
+  ecLevel: "H",       // Default H — best for phone camera reliability
+  logoSrc: null,
+  logoSize: 20,
+  hasMargin: true,
+  customTab: "style",
+  verifyStatus: null, // null | "checking" | "pass" | "fail"
+  imgCopied: false,
+  dataCopied: false,
 };
 
-function sectorCount(r, rMax, sMax, sFloor) {
-  return Math.max(sFloor, Math.round(sMax * r / rMax));
+/* ── Reactive core ────────────────────────────────────────────────── */
+let _raf = false;
+function update(patch) {
+  Object.assign(S, typeof patch === "function" ? patch(S) : patch);
+  if (!_raf) { _raf = true; requestAnimationFrame(() => { render(); _raf = false; }); }
 }
 
-// ── Auto version selection ─────────────────────────────────────────────────
-function autoSelectVersion(payload) {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(payload).length;
-  
-  for (const [name, cfg] of Object.entries(VERSIONS)) {
-    if (bytes <= cfg.dataBytes - 2) {
-      return name;
+/* ── h() — correct property setting, cursor-safe ─────────────────── */
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class")   el.className = v;
+    else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
+    else if (k === "value")    el.value = v;          // property, not attribute
+    else if (k === "checked")  el.checked = !!v;
+    else if (k === "selected") el.selected = !!v;
+    else if (k === "disabled") el.disabled = !!v;
+    else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  }
+  for (const c of kids.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return el;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   QRController — canvas lifecycle fully decoupled from UI render
+   • Owns #qr-mount contents
+   • Uses .update() to avoid flicker when only options change
+   • MutationObserver to detect canvas-ready — no setTimeout dead-wait
+   • EC invariant enforced here, at generation time
+═══════════════════════════════════════════════════════════════════ */
+const QRC = (() => {
+  let _inst = null;
+  let _lastSig = null;
+  let _obs = null;       // MutationObserver for canvas-ready detection
+
+  // EC invariant: logo requires minimum error correction
+  function clampEC(ec, logoSrc, logoSize) {
+    if (!logoSrc || logoSize === 0) return ec;
+    if (ec === "L") return "H";
+    if (ec === "M" && logoSize > 15) return "H";
+    if (ec === "M") return "Q";
+    return ec;
+  }
+
+  function mount() { return document.getElementById("qr-mount"); }
+
+  function sig(o) {
+    return [o.data, o.dotType, o.eyeRadius, o.fgColor, o.bgColor, o.useGrad, o.gradEnd, o.ecLevel, o.logoSrc, o.logoSize, o.hasMargin].join("|");
+  }
+
+  // Wait for canvas to appear in mount using MutationObserver
+  // Replaces arbitrary 900ms setTimeout — fires within one paint frame
+  function waitForCanvas(el) {
+    return new Promise(resolve => {
+      const existing = el.querySelector("canvas");
+      if (existing) { resolve(existing); return; }
+      if (_obs) _obs.disconnect();
+      _obs = new MutationObserver(() => {
+        const c = el.querySelector("canvas");
+        if (c) { _obs.disconnect(); _obs = null; resolve(c); }
+      });
+      _obs.observe(el, { childList: true, subtree: true });
+      // Safety timeout: if canvas never appears (SVG-only path), resolve anyway
+      setTimeout(() => { if (_obs) { _obs.disconnect(); _obs = null; } resolve(null); }, 3000);
+    });
+  }
+
+  async function generate(opts) {
+    const el = mount(); if (!el) return;
+    const effectiveEC = clampEC(opts.ecLevel, opts.logoSrc, opts.logoSize);
+    const s = sig({ ...opts, ecLevel: effectiveEC });
+    if (s === _lastSig) return;
+    _lastSig = s;
+
+    update({ verifyStatus: "checking" });
+
+    try { await ensureQRLib(); } catch (e) { toast("QR library load failed", "er"); update({ verifyStatus: null }); return; }
+
+    const qOpts = {
+      width: 400, height: 400,
+      data: opts.data,
+      dotsOptions: opts.useGrad
+        ? { type: opts.dotType, gradient: { type: "linear", rotation: 0.8, colorStops: [{ offset: 0, color: opts.fgColor }, { offset: 1, color: opts.gradEnd }] } }
+        : { type: opts.dotType, color: opts.fgColor },
+      cornersSquareOptions: {
+        type: opts.eyeRadius === "dot" ? "dot" : opts.eyeRadius === "extra-rounded" ? "extra-rounded" : "square",
+        color: opts.fgColor
+      },
+      cornersDotOptions: { type: opts.eyeRadius === "dot" ? "dot" : "square", color: opts.fgColor },
+      backgroundOptions: { color: opts.bgColor },
+      qrOptions: { errorCorrectionLevel: effectiveEC },
+      margin: opts.hasMargin ? 16 : 0,  // 16px quiet zone — minimum for phone cameras
+      ...(opts.logoSrc ? { image: opts.logoSrc, imageOptions: { imageSize: opts.logoSize / 100, margin: 5, crossOrigin: "anonymous" } } : {}),
+    };
+
+    if (window.QRCodeStyling) {
+      if (_inst) {
+        _inst.update(qOpts); // in-place update — no flicker, no DOM thrash
+      } else {
+        el.innerHTML = "";
+        _inst = new window.QRCodeStyling(qOpts);
+        _inst.append(el);
+      }
+    } else if (window.QRCode) {
+      el.innerHTML = ""; _inst = null;
+      new window.QRCode(el, {
+        text: opts.data, width: 320, height: 320,
+        colorDark: opts.fgColor, colorLight: opts.bgColor,
+        correctLevel: window.QRCode.CorrectLevel[effectiveEC] || window.QRCode.CorrectLevel.H,
+      });
     }
-  }
-  return 'mega'; // fallback
-}
 
-// ── Contrast checker ───────────────────────────────────────────────────────
-function getLuminance(hex) {
-  const rgb = parseInt(hex.slice(1), 16);
-  const r = (rgb >> 16) & 0xff;
-  const g = (rgb >> 8) & 0xff;
-  const b = rgb & 0xff;
-  
-  const [rs, gs, bs] = [r, g, b].map(c => {
-    c = c / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  });
-  
-  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
-}
+    // MutationObserver-based verify — fires as soon as canvas appears, not after 900ms
+    waitForCanvas(el).then(canvas => {
+      if (canvas) autoVerify(opts.data, canvas);
+      else update({ verifyStatus: null });
+    });
+  }
 
-function getContrastRatio(hex1, hex2) {
-  const l1 = getLuminance(hex1);
-  const l2 = getLuminance(hex2);
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
-}
+  function clear() {
+    const el = mount(); if (!el) return;
+    if (_obs) { _obs.disconnect(); _obs = null; }
+    _inst = null; _lastSig = null;
+    el.innerHTML = "";
+    update({ verifyStatus: null });
+  }
 
-// ── Error correction ───────────────────────────────────────────────────────
-function addErrorCorrection(dataBytes, ecLevel = 0.3) {
-  const ecBytes = Math.ceil(dataBytes.length * ecLevel);
-  const result = new Uint8Array(dataBytes.length + ecBytes);
-  result.set(dataBytes, 0);
-  
-  for (let i = 0; i < ecBytes; i++) {
-    let ec = 0;
-    for (let j = 0; j < dataBytes.length; j++) {
-      ec ^= dataBytes[j] * (i + j + 1);
-    }
-    result[dataBytes.length + i] = ec & 0xFF;
-  }
-  
-  return result;
-}
+  function getInstance() { return _inst; }
+  function getClampEC(ec, logoSrc, logoSize) { return clampEC(ec, logoSrc, logoSize); }
 
-// ── Data encoding ──────────────────────────────────────────────────────────
-function encodePayload(payload, maxBytes) {
-  const encoder = new TextEncoder();
-  const utf8 = encoder.encode(payload);
-  
-  if (utf8.length > maxBytes - 2) {
-    throw new Error(`Payload too long: ${utf8.length} bytes (max ${maxBytes - 2})`);
-  }
-  
-  const result = new Uint8Array(maxBytes);
-  result[0] = (utf8.length >> 8) & 0xFF;
-  result[1] = utf8.length & 0xFF;
-  result.set(utf8, 2);
-  
-  for (let i = 2 + utf8.length; i < maxBytes; i++) {
-    result[i] = (i % 2 === 0) ? 0xEC : 0x11;
-  }
-  
-  return result;
-}
+  return { generate, clear, getInstance, clampEC: getClampEC };
+})();
 
-// ── Bit matrix builder ─────────────────────────────────────────────────────
-function buildBitMatrix(encodedBytes, version) {
-  const cfg = VERSIONS[version];
-  const { sMax, rings, sFloor } = cfg;
-  
-  const bits = [];
-  for (const byte of encodedBytes) {
-    for (let i = 7; i >= 0; i--) {
-      bits.push((byte >> i) & 1);
-    }
-  }
-  
-  let totalCells = 0;
-  const ringCells = [];
-  for (let r = 1; r <= rings; r++) {
-    const s = sectorCount(r, rings, sMax, sFloor);
-    ringCells.push(s);
-    totalCells += s;
-  }
-  
-  const versionMarker = { lite: 0b00, standard: 0b01, pro: 0b10, ultra: 0b11, mega: 0b11 }[version];
-  bits.unshift((versionMarker >> 1) & 1, versionMarker & 1);
-  
-  if (version === 'mega') {
-    bits.unshift(1);
-  } else {
-    bits.unshift(0);
-  }
-  
-  while (bits.length < totalCells) {
-    bits.push(bits.length % 2);
-  }
-  
-  const matrix = [];
-  let idx = 0;
-  for (let r = 0; r < rings; r++) {
-    const row = [];
-    for (let s = 0; s < ringCells[r]; s++) {
-      row.push(bits[idx++] || 0);
-    }
-    matrix.push(row);
-  }
-  
-  return matrix;
-}
-
-// ── SVG Renderer with WHITE BORDER ─────------────────────────────────────────────
-function renderORBIS({
-  payload = 'orbis.design',
-  version  = 'lite',
-  fg       = '#0a0a0f',
-  bg       = '#f5f2eb',
-  logoText = '◎',
-  size     = 400,
-}) {
-  const cfg = VERSIONS[version];
-  const { sMax, rings, sFloor } = cfg;
-  
-  const encoded = encodePayload(payload, cfg.dataBytes);
-  const withEC = addErrorCorrection(encoded, 0.3);
-  const matrix = buildBitMatrix(withEC, version);
-  
-  const cx = size / 2, cy = size / 2;
-  const R  = size / 2 - 20; // EXTRA PADDING for white border
-  
-  const logoR     = R * 0.18;
-  const identityR = R * 0.25;
-  const dataInR   = R * 0.25;
-  const dataOutR  = R * 0.72;
-  const ecInR     = R * 0.72;
-  const ecOutR    = R * 0.86;
-  const scanInR   = R * 0.86;
-  const scanOutR  = R;
-  
-  const ringW = (dataOutR - dataInR) / rings;
-  
-  let paths = '';
-  
-  // WHITE BORDER/PADDING (safety margin)
-  paths += `<circle cx="${cx}" cy="${cy}" r="${R + 18}" fill="white"/>`;
-  
-  // Background
-  paths += `<circle cx="${cx}" cy="${cy}" r="${R + 2}" fill="${bg}"/>`;
-  
-  // L5 — Outer Scan Ring
-  const L5_SEGMENTS = 48;
-  for (let i = 0; i < L5_SEGMENTS; i++) {
-    const startAngle = (i / L5_SEGMENTS) * 2 * Math.PI - Math.PI / 2;
-    const endAngle   = ((i + 0.75) / L5_SEGMENTS) * 2 * Math.PI - Math.PI / 2;
-    const path = annularArc(cx, cy, scanInR, scanOutR, startAngle, endAngle);
-    const opacity = (i % 6 === 0) ? 1.0 : 0.7;
-    paths += `<path d="${path}" fill="${fg}" opacity="${opacity}"/>`;
-  }
-  
-  [0, 120, 240].forEach(deg => {
-    const baseRad = (deg - 90) * Math.PI / 180;
-    const arcSpan = (3.5 / L5_SEGMENTS) * 2 * Math.PI;
-    const a1 = baseRad - arcSpan / 2;
-    const a2 = baseRad + arcSpan / 2;
-    paths += `<path d="${annularArc(cx, cy, scanInR - 3, scanOutR + 2, a1, a2)}" fill="${fg}"/>`;
-  });
-  
-  // L4 — Error Correction
-  const EC_DOTS = 60;
-  for (let i = 0; i < EC_DOTS; i++) {
-    const angle = (i / EC_DOTS) * 2 * Math.PI - Math.PI / 2;
-    const rMid  = (ecInR + ecOutR) / 2;
-    const x = cx + Math.cos(angle) * rMid;
-    const y = cy + Math.sin(angle) * rMid;
-    const sz = (i % 4 === 0) ? 2.2 : 1.3;
-    paths += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${sz}" fill="${fg}" opacity="${i%4===0?0.8:0.4}"/>`;
-  }
-  
-  // L3 — Primary Data Rings
-  for (let r = 0; r < rings; r++) {
-    const innerR = dataInR + r * ringW;
-    const outerR = dataInR + (r + 1) * ringW - 0.8;
-    const rowBits = matrix[r];
-    const numSectors = rowBits.length;
-    const angleStep = (2 * Math.PI) / numSectors;
-    
-    for (let s = 0; s < numSectors; s++) {
-      if (rowBits[s] === 0) continue;
-      const startAngle = s * angleStep - Math.PI / 2;
-      const endAngle   = (s + 1) * angleStep - Math.PI / 2 - 0.015;
-      const path = annularArc(cx, cy, innerR, outerR, startAngle, endAngle);
-      paths += `<path d="${path}" fill="${fg}" opacity="${0.75 + (r / rings) * 0.25}"/>`;
-    }
-  }
-  
-  // L2 — Identity Ring
-  const ID_NOTCHES = 48;
-  for (let i = 0; i < ID_NOTCHES; i++) {
-    const a1 = (i / ID_NOTCHES) * 2 * Math.PI - Math.PI / 2;
-    const a2 = ((i + 0.7) / ID_NOTCHES) * 2 * Math.PI - Math.PI / 2;
-    const innerV = (i % 3 === 0) ? logoR + 1 : logoR + 3;
-    paths += `<path d="${annularArc(cx, cy, innerV, identityR - 1, a1, a2)}" fill="${fg}" opacity="${i%3===0?0.9:0.3}"/>`;
-  }
-  
-  // L1 — Core Logo
-  paths += `<circle cx="${cx}" cy="${cy}" r="${logoR}" fill="${bg}"/>`;
-  paths += `<circle cx="${cx}" cy="${cy}" r="${logoR}" fill="none" stroke="${fg}" stroke-width="1.5" opacity="0.6"/>`;
-  
-  const logoFontSize = logoText.length === 1 ? logoR * 0.85 : logoR * 0.55;
-  paths += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
-    font-family="DM Serif Display, Georgia, serif"
-    font-size="${logoFontSize.toFixed(1)}"
-    fill="${fg}">${escapeXml(logoText)}</text>`;
-  
-  paths += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${fg}" stroke-width="1.5" opacity="0.5"/>`;
-  
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-  <defs>
-    <clipPath id="circle-clip">
-      <circle cx="${cx}" cy="${cy}" r="${R + 20}"/>
-    </clipPath>
-  </defs>
-  <g clip-path="url(#circle-clip)">
-    ${paths}
-  </g>
-</svg>`;
-}
-
-function annularArc(cx, cy, innerR, outerR, startAngle, endAngle) {
-  const x1 = cx + Math.cos(startAngle) * outerR;
-  const y1 = cy + Math.sin(startAngle) * outerR;
-  const x2 = cx + Math.cos(endAngle)   * outerR;
-  const y2 = cy + Math.sin(endAngle)   * outerR;
-  const x3 = cx + Math.cos(endAngle)   * innerR;
-  const y3 = cy + Math.sin(endAngle)   * innerR;
-  const x4 = cx + Math.cos(startAngle) * innerR;
-  const y4 = cy + Math.sin(startAngle) * innerR;
-  const large = (endAngle - startAngle) > Math.PI ? 1 : 0;
-  return [
-    `M ${x1.toFixed(2)} ${y1.toFixed(2)}`,
-    `A ${outerR.toFixed(2)} ${outerR.toFixed(2)} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`,
-    `L ${x3.toFixed(2)} ${y3.toFixed(2)}`,
-    `A ${innerR.toFixed(2)} ${innerR.toFixed(2)} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)}`,
-    'Z'
-  ].join(' ');
-}
-
-function escapeXml(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  UI CONTROLLER
-// ═══════════════════════════════════════════════════════════════════════════
-
-let currentSvg = '';
-let currentFg = '#0a0a0f';
-let currentBg = '#f5f2eb';
-let manualVersion = null;
-
-function getInputs() {
-  const payload = document.getElementById('url-input').value.trim() || 'orbis.design';
-  const version = manualVersion || autoSelectVersion(payload);
-  
-  return {
-    payload,
-    version,
-    fg: currentFg,
-    bg: currentBg,
-    logoText: document.getElementById('logo-input').value.trim() || '◎',
-    size: 400,
-  };
-}
-
-function updateCapacityIndicator() {
-  const payload = document.getElementById('url-input').value.trim() || '';
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(payload).length;
-  
-  const version = manualVersion || autoSelectVersion(payload);
-  const cfg = VERSIONS[version];
-  const maxBytes = cfg.dataBytes - 2;
-  
-  const percentage = Math.min(100, (bytes / maxBytes) * 100);
-  
-  document.getElementById('capacity-text').textContent = `${bytes} / ${maxBytes} bytes`;
-  document.getElementById('auto-badge').textContent = manualVersion ? `MANUAL: ${version.toUpperCase()}` : `AUTO: ${version.toUpperCase()}`;
-  
-  const bar = document.getElementById('capacity-bar');
-  bar.style.width = percentage + '%';
-  bar.className = 'capacity-bar-fill';
-  
-  if (percentage > 100) {
-    bar.classList.add('error');
-  } else if (percentage > 85) {
-    bar.classList.add('warning');
-  }
-  
-  // Update generate button
-  document.getElementById('gen-btn').disabled = bytes > maxBytes;
-}
-
-function generate() {
-  const inputs = getInputs();
-  
+/* ── autoVerify — compares decoded === expected, always shows disclaimer */
+async function autoVerify(expectedData, canvas) {
   try {
-    currentSvg = renderORBIS(inputs);
-    const canvas = document.getElementById('orbis-canvas');
-    canvas.innerHTML = currentSvg;
-    updateDownloads(inputs.payload);
-  } catch (err) {
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(inputs.payload).length;
-    const cfg = VERSIONS[inputs.version];
-    const maxAllowed = cfg.dataBytes - 2;
-    
-    alert(`❌ ${err.message}\n\nYour text: "${inputs.payload}"\nSize: ${bytes} bytes\nMax allowed: ${maxAllowed} bytes\n\n💡 Try a shorter version or upgrade to a bigger size.`);
+    const ZXing = await ensureZXing();
+    const img = new Image();
+    img.src = canvas.toDataURL("image/png");
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    const reader = new ZXing.BrowserQRCodeReader();
+    const result = await reader.decodeFromImageElement(img).catch(() => null);
+    const decoded = result ? result.getText() : null;
+    // Exact comparison — not just truthy
+    update({ verifyStatus: decoded === expectedData ? "pass" : "fail" });
+  } catch {
+    update({ verifyStatus: null });
   }
 }
 
-function updateDownloads(payload) {
-  // Smart filename
-  let filename = 'orbis';
-  if (payload) {
-    const slug = payload
-      .replace(/^https?:\/\//, '')
-      .replace(/[^a-z0-9]/gi, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 30);
-    filename = 'orbis-' + (slug || 'code');
+/* ── Download ─────────────────────────────────────────────────────── */
+function dlQR(fmt) {
+  const inst = QRC.getInstance();
+  if (!inst) {
+    const c = document.getElementById("qr-mount")?.querySelector("canvas");
+    if (!c) { toast("Generate a QR first", "wn"); return; }
+    const a = document.createElement("a"); a.href = c.toDataURL(); a.download = "qrcode.png"; a.click();
+    return;
   }
-  
-  const svgBlob = new Blob([currentSvg], { type: 'image/svg+xml' });
-  const svgUrl = URL.createObjectURL(svgBlob);
-  const dlSvg = document.getElementById('dl-svg');
-  dlSvg.href = svgUrl;
-  dlSvg.download = filename + '.svg';
-  
-  const svgEl = document.getElementById('orbis-canvas').querySelector('svg');
-  const canvas = document.createElement('canvas');
-  canvas.width = 800;
-  canvas.height = 800;
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0, 800, 800);
-    URL.revokeObjectURL(url);
-    const dlPng = document.getElementById('dl-png');
-    dlPng.href = canvas.toDataURL('image/png');
-    dlPng.download = filename + '.png';
+  inst.download({ name: "qrcode", extension: fmt });
+}
+
+/* ── Copy image ───────────────────────────────────────────────────── */
+async function copyImg() {
+  const c = document.getElementById("qr-mount")?.querySelector("canvas");
+  if (!c) { toast("Generate a QR first", "wn"); return; }
+  c.toBlob(async blob => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      update({ imgCopied: true }); setTimeout(() => update({ imgCopied: false }), 2000);
+      toast("Image copied", "ok");
+    } catch { toast("Clipboard denied — use Download instead", "er"); }
+  });
+}
+
+/* ── Copy data ────────────────────────────────────────────────────── */
+async function copyData(raw) {
+  try {
+    await navigator.clipboard.writeText(raw);
+    update({ dataCopied: true }); setTimeout(() => update({ dataCopied: false }), 2000);
+    toast("Copied", "ok");
+  } catch { toast("Clipboard write failed", "er"); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════════════ */
+const QR_TYPES = [
+  { id:"url",   label:"URL",   icon:"🔗" }, { id:"text",  label:"Text",  icon:"📝" },
+  { id:"email", label:"Email", icon:"✉️" }, { id:"sms",   label:"SMS",   icon:"💬" },
+  { id:"phone", label:"Phone", icon:"📞" }, { id:"wifi",  label:"WiFi",  icon:"📶" },
+  { id:"vcard", label:"vCard", icon:"👤" },
+];
+const DOT_TYPES   = ["square","dots","rounded","extra-rounded","classy","classy-rounded"];
+const DOT_LABELS  = { square:"Square", dots:"Dots", rounded:"Rounded", "extra-rounded":"X-Round", classy:"Classy", "classy-rounded":"Classy+" };
+const EYE_RADII   = ["square","dot","extra-rounded"];
+const EYE_LABELS  = { square:"Square", dot:"Dot", "extra-rounded":"Round" };
+const EC_LEVELS   = ["L","M","Q","H"];
+const TEMPLATES   = [
+  { name:"Acid",      bg:"#0c0f0a", fg:"#b8f400" }, { name:"Obsidian", bg:"#0d0d0d", fg:"#ffffff" },
+  { name:"Blueprint", bg:"#0a1628", fg:"#4da6ff" }, { name:"Ember",    bg:"#1a0800", fg:"#ff6b35" },
+  { name:"Sakura",    bg:"#1a0d12", fg:"#ff8fab" }, { name:"Matrix",   bg:"#001a00", fg:"#00ff41" },
+  { name:"Chalk",     bg:"#fafaf8", fg:"#1a1a1a" }, { name:"Gold",     bg:"#0f0c00", fg:"#ffd700" },
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   PERSISTENT ELEMENTS — never recreated by render()
+   This is how we fix focus loss: form + QR mount are stable DOM nodes.
+   render() patches their attributes; never replaces the elements.
+═══════════════════════════════════════════════════════════════════ */
+
+// Persistent QR mount
+const QR_MOUNT = (() => {
+  const el = document.createElement("div");
+  el.id = "qr-mount";
+  el.className = "qr-mount empty";
+  el.innerHTML = `<div class="empty-hint"><div class="big">▣</div><div class="txt">Enter data to generate</div></div>`;
+  return el;
+})();
+
+// Persistent form container — children updated via patchForm(), not replaced
+const FORM_EL = document.createElement("div");
+FORM_EL.id = "form-container";
+
+/* ═══════════════════════════════════════════════════════════════════
+   FORM PATCHING — updates inputs in-place, never replaces elements
+   This is the fix for focus loss. We compare current DOM to desired
+   state and only change what differs.
+═══════════════════════════════════════════════════════════════════ */
+function patchInput(container, key, label, placeholder, type = "text") {
+  let wrap = container.querySelector(`[data-key="${key}"]`);
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "fld";
+    wrap.setAttribute("data-key", key);
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = label;
+    const inp = document.createElement("input");
+    inp.type = type; inp.placeholder = placeholder;
+    inp.addEventListener("input", e => {
+      const newFields = { ...S.fields, [key]: e.target.value };
+      S.fields = newFields; // Direct mutation — we're inside the input handler, rAF will pick it up
+      lsSet("qrs_fields_" + S.qrType, newFields);
+      scheduleQR();
+    });
+    wrap.appendChild(lbl); wrap.appendChild(inp);
+    container.appendChild(wrap);
+  }
+  // Patch only if value differs from state (don't touch focused input)
+  const inp = wrap.querySelector("input");
+  if (document.activeElement !== inp && inp.value !== (S.fields[key] || "")) {
+    inp.value = S.fields[key] || "";
+  }
+  inp.type = type;
+  inp.placeholder = placeholder;
+  wrap.querySelector(".lbl").textContent = label;
+}
+
+function patchTextarea(container, key, label, placeholder) {
+  let wrap = container.querySelector(`[data-key="${key}"]`);
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "fld";
+    wrap.setAttribute("data-key", key);
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = label;
+    const ta = document.createElement("textarea");
+    ta.placeholder = placeholder;
+    ta.addEventListener("input", e => {
+      S.fields = { ...S.fields, [key]: e.target.value };
+      lsSet("qrs_fields_" + S.qrType, S.fields);
+      scheduleQR();
+    });
+    wrap.appendChild(lbl); wrap.appendChild(ta);
+    container.appendChild(wrap);
+  }
+  const ta = wrap.querySelector("textarea");
+  if (document.activeElement !== ta && ta.value !== (S.fields[key] || "")) {
+    ta.value = S.fields[key] || "";
+  }
+  ta.placeholder = placeholder;
+}
+
+function patchSelect(container, key, label, options) {
+  let wrap = container.querySelector(`[data-key="${key}"]`);
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "fld";
+    wrap.setAttribute("data-key", key);
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = label;
+    const sel = document.createElement("select");
+    options.forEach(o => { const op = document.createElement("option"); op.value = op.textContent = o; sel.appendChild(op); });
+    sel.addEventListener("change", e => {
+      S.fields = { ...S.fields, [key]: e.target.value };
+      lsSet("qrs_fields_" + S.qrType, S.fields);
+      scheduleQR();
+    });
+    wrap.appendChild(lbl); wrap.appendChild(sel);
+    container.appendChild(wrap);
+  }
+  const sel = wrap.querySelector("select");
+  sel.value = S.fields[key] || options[0];
+}
+
+function buildForm(container) {
+  // Remove any fields not needed for current type
+  const needed = getNeededKeys(S.qrType);
+  [...container.querySelectorAll("[data-key]")].forEach(el => {
+    if (!needed.includes(el.dataset.key)) el.remove();
+  });
+
+  // Also remove two-col wrappers if switching away from vcard
+  if (S.qrType !== "vcard") {
+    const tc = container.querySelector(".two"); if (tc) tc.remove();
+  }
+
+  switch (S.qrType) {
+    case "url":
+      patchInput(container, "url", "Website URL", "https://example.com", "url"); break;
+    case "text":
+      patchTextarea(container, "text", "Text Content", "Any text, code, message…"); break;
+    case "email":
+      patchInput(container, "email", "Email", "you@example.com", "email");
+      patchInput(container, "subject", "Subject", "Subject line");
+      patchTextarea(container, "body", "Body", "Message…"); break;
+    case "sms":
+      patchInput(container, "phone", "Phone Number", "+1 555 000 0000", "tel");
+      patchTextarea(container, "message", "Message", "SMS body…"); break;
+    case "phone":
+      patchInput(container, "phone", "Phone Number", "+1 555 000 0000", "tel"); break;
+    case "wifi":
+      patchInput(container, "ssid", "Network SSID", "MyWiFiNetwork");
+      patchInput(container, "password", "Password", "WiFi password", "password");
+      patchSelect(container, "security", "Security", ["WPA","WPA2","WEP","None"]); break;
+    case "vcard":
+      // Two-column name row
+      let twoCol = container.querySelector(".two");
+      if (!twoCol) {
+        twoCol = document.createElement("div");
+        twoCol.className = "two";
+        container.insertBefore(twoCol, container.firstChild);
+      }
+      // Check keys exist inside twoCol specifically
+      const fnNeeded = ["firstName","lastName"];
+      [...twoCol.querySelectorAll("[data-key]")].forEach(el => { if (!fnNeeded.includes(el.dataset.key)) el.remove(); });
+      patchInput(twoCol, "firstName", "First Name", "John");
+      patchInput(twoCol, "lastName", "Last Name", "Doe");
+      patchInput(container, "org", "Organization", "Company Name");
+      patchInput(container, "phone", "Phone", "+1 555 000 0000", "tel");
+      patchInput(container, "email", "Email", "john@example.com", "email");
+      patchInput(container, "website", "Website", "https://example.com", "url");
+      patchInput(container, "address", "Address", "123 Main St, City"); break;
+  }
+}
+
+function getNeededKeys(type) {
+  const map = {
+    url:["url"], text:["text"], email:["email","subject","body"],
+    sms:["phone","message"], phone:["phone"], wifi:["ssid","password","security"],
+    vcard:["firstName","lastName","org","phone","email","website","address"]
   };
-  img.src = url;
+  return map[type] || [];
 }
 
-// ── Event bindings ─────────────────────────────────────────────────────────
-document.getElementById('gen-btn').addEventListener('click', generate);
+/* ── Debounced QR generation — triggered by form changes ─────────── */
+let _qrTimer = null;
+function scheduleQR() {
+  if (_qrTimer) clearTimeout(_qrTimer);
+  _qrTimer = setTimeout(triggerQR, 180); // 180ms debounce on typing
+}
 
-document.getElementById('url-input').addEventListener('input', () => {
-  updateCapacityIndicator();
-  // Live preview with debounce
-  clearTimeout(window.livePreviewTimeout);
-  window.livePreviewTimeout = setTimeout(generate, 500);
-});
-
-document.getElementById('url-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') generate();
-});
-
-// Color presets
-document.querySelectorAll('.color-preset').forEach(preset => {
-  preset.addEventListener('click', () => {
-    document.querySelectorAll('.color-preset').forEach(p => p.classList.remove('active'));
-    preset.classList.add('active');
-    
-    currentFg = preset.dataset.fg;
-    currentBg = preset.dataset.bg;
-    
-    generate();
+function triggerQR() {
+  _qrTimer = null;
+  const raw = buildData(S.qrType, S.fields);
+  if (!raw.trim()) { QRC.clear(); return; }
+  QRC.generate({
+    data: raw, dotType: S.dotType, eyeRadius: S.eyeRadius,
+    fgColor: S.fgColor, bgColor: S.bgColor,
+    useGrad: S.useGrad, gradEnd: S.gradEnd,
+    ecLevel: S.ecLevel, logoSrc: S.logoSrc,
+    logoSize: S.logoSize, hasMargin: S.hasMargin,
   });
-});
+}
 
-// Advanced toggle
-document.getElementById('advanced-toggle').addEventListener('click', () => {
-  const section = document.getElementById('advanced-section');
-  const toggle = document.getElementById('advanced-toggle');
-  
-  if (section.classList.contains('visible')) {
-    section.classList.remove('visible');
-    toggle.textContent = '▼ Advanced Options';
+/* ═══════════════════════════════════════════════════════════════════
+   RENDER — UI skeleton only. Form inputs never replaced. QR never touched.
+═══════════════════════════════════════════════════════════════════ */
+const tog = (on, onClick) => h("button", { class: "tog" + (on ? " on" : ""), onClick }, h("div", { class: "tog-k" }));
+
+function rHeader() {
+  return h("header", {}, h("div", { class: "hdr-inner" },
+    h("div", { class: "logo" },
+      h("div", { class: "logo-box" }, "▣"),
+      h("div", { class: "logo-name" }, "QR", h("span", {}, "_"), "studio")
+    ),
+    h("div", { class: "hdr-badge" }, "ENCODE")
+  ));
+}
+
+function rTypeSelector() {
+  return h("div", {}, h("div", { class: "sec-label", style: "margin-bottom:12px" }, "◈ Content Type"),
+    h("div", { class: "type-grid" },
+      QR_TYPES.map(t => h("button", {
+        class: "type-btn" + (S.qrType === t.id ? " on" : ""),
+        onClick: () => {
+          if (S.qrType === t.id) return;
+          S.fields = lsGet("qrs_fields_" + t.id, {});
+          update({ qrType: t.id, fields: S.fields });
+          // Rebuild form for new type
+          setTimeout(() => { buildForm(FORM_EL); triggerQR(); }, 0);
+        }
+      }, h("span", { class: "ico" }, t.icon), t.label))
+    )
+  );
+}
+
+function rStyleTab() {
+  return h("div", {},
+    h("div", { class: "lbl" }, "Module Shape"),
+    h("div", { class: "shape-grid" },
+      DOT_TYPES.map(d => h("button", { class: "shape-btn" + (S.dotType === d ? " on" : ""), onClick: () => { update({ dotType: d }); triggerQR(); } }, DOT_LABELS[d]))
+    ),
+    h("div", { class: "lbl" }, "Eye Style"),
+    h("div", { class: "eye-row" },
+      EYE_RADII.map(e => h("button", { class: "eye-btn" + (S.eyeRadius === e ? " on" : ""), onClick: () => { update({ eyeRadius: e }); triggerQR(); } }, EYE_LABELS[e]))
+    )
+  );
+}
+
+function rColorsTab() {
+  const cRow = (label, val, onChange) => h("div", { class: "c-row" },
+    h("span", { class: "c-lbl" }, label),
+    h("div", { class: "c-ctrl" },
+      h("div", { class: "swatch", style: { background: val } },
+        h("input", { type: "color", value: val, onInput: e => { onChange(e.target.value); triggerQR(); } })
+      ),
+      h("input", { type: "text", class: "hex", value: val,
+        onInput: e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) { onChange(e.target.value); triggerQR(); } }
+      })
+    )
+  );
+  return h("div", {},
+    h("div", { class: "lbl" }, "Templates"),
+    h("div", { class: "tpl-row" },
+      TEMPLATES.map(t => h("button", { class: "tpl",
+        onClick: () => { update({ bgColor: t.bg, fgColor: t.fg, useGrad: false }); triggerQR(); }
+      }, h("div", { style: { width:"12px",height:"12px",borderRadius:"3px",background:t.fg,flexShrink:"0" } }), t.name))
+    ),
+    cRow("Foreground", S.fgColor, v => update({ fgColor: v })),
+    cRow("Background", S.bgColor, v => update({ bgColor: v })),
+    h("div", { class: "tog-row" },
+      tog(S.useGrad, () => { update({ useGrad: !S.useGrad }); triggerQR(); }),
+      h("span", { class: "tog-lbl", onClick: () => { update({ useGrad: !S.useGrad }); triggerQR(); } }, "Gradient mode")
+    ),
+    S.useGrad ? cRow("Gradient End", S.gradEnd, v => update({ gradEnd: v })) : null,
+    // Phone camera warning about gradients
+    S.useGrad ? h("div", { class: "qz-notice" }, "⚠ Gradients reduce local dot contrast. Phone cameras may struggle. Solid foreground is always more reliable.") : null
+  );
+}
+
+function rAdvancedTab(status) {
+  const dc = { good:"var(--a)", caution:"var(--warn)", bad:"var(--danger)" };
+  const si = { good:"✓", caution:"⚠", bad:"✕" };
+  const effEC = QRC.clampEC(S.ecLevel, S.logoSrc, S.logoSize);
+
+  return h("div", {},
+    h("div", { class: "lbl" }, "Error Correction"),
+    h("div", { class: "ec-row" },
+      EC_LEVELS.map(l => {
+        const isSelected = S.ecLevel === l;
+        const isClamped  = effEC !== S.ecLevel && l === effEC;
+        return h("button", {
+          class: "ecb" + (isSelected ? " on" : "") + (isClamped && !isSelected ? " clamped" : ""),
+          title: isClamped && !isSelected ? "Auto-upgraded by logo requirement" : "",
+          onClick: () => { update({ ecLevel: l }); triggerQR(); }
+        }, l + (isClamped && !isSelected ? "↑" : ""));
+      })
+    ),
+    h("div", { class: "ec-hint" }, "L 7%  M 15%  Q 25%  H 30% — H recommended for styled QR"),
+
+    h("div", { class: "lbl" }, "Logo / Icon"),
+    S.logoSrc
+      ? h("div", { class: "logo-prev" },
+          h("img", { class: "logo-img", src: S.logoSrc }),
+          h("div", { style: "flex:1" },
+            h("div", { style: "font-size:11px;color:var(--mut);margin-bottom:5px" }, `Size: ${S.logoSize}%`),
+            h("input", { type: "range", min: 10, max: 35, value: S.logoSize, style: "width:100%",
+              onInput: e => { update({ logoSize: +e.target.value }); triggerQR(); }
+            })
+          ),
+          h("button", { class: "logo-rm", onClick: () => { update({ logoSrc: null, logoSize: 20 }); triggerQR(); } }, "×")
+        )
+      : h("button", { class: "logo-up", onClick: () => document.getElementById("logo-inp")?.click() },
+          h("span", { style: "font-size:20px" }, "⬆"),
+          h("span", { style: "font-size:13px;font-weight:600" }, "Upload Logo"),
+          h("span", { style: "font-size:10px;color:rgba(184,244,0,.35)" }, "Use H error correction with logos")
+        ),
+    h("input", { id: "logo-inp", type: "file", accept: "image/*", style: "display:none",
+      onChange: e => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const r = new FileReader();
+        r.onload = ev => { update({ logoSrc: ev.target.result, ecLevel: "H" }); triggerQR(); };
+        r.readAsDataURL(file);
+      }
+    }),
+
+    h("div", { style: "margin-top:14px;display:flex;align-items:center;gap:9px;margin-bottom:16px" },
+      tog(S.hasMargin, () => { update({ hasMargin: !S.hasMargin }); triggerQR(); }),
+      h("span", { class: "tog-lbl", onClick: () => { update({ hasMargin: !S.hasMargin }); triggerQR(); } }, "Quiet zone margin")
+    ),
+
+    // Phone camera specific quiet zone tip
+    h("div", { class: "qz-notice" },
+      h("strong", {}, "Phone camera tip: "),
+      "Quiet zone (white border) is how scanners locate the QR. Without it, scan fails reliably. Keep margin ON."
+    ),
+
+    // Categorical status
+    h("div", { class: "scan-box " + status.level },
+      h("div", { class: "scan-hdr" },
+        h("div", { class: "scan-dot", style: { background: dc[status.level] } }),
+        h("div", { class: "scan-title", style: { color: dc[status.level] } }, status.label)
+      ),
+      status.reasons.length > 0
+        ? h("div", { class: "scan-items" },
+            status.reasons.map(r => h("div", { class: "scan-item" },
+              h("span", { style: { color: r.sev==="bad"?"var(--danger)":"var(--warn)", flexShrink:"0" } }, si[r.sev]),
+              h("span", {}, r.msg)
+            ))
+          )
+        : h("div", { class: "scan-item" },
+            h("span", { style: "color:var(--a);flex-shrink:0" }, "✓"),
+            h("span", {}, "No camera readability issues detected")
+          )
+    )
+  );
+}
+
+function rPreviewPanel(rawData) {
+  const hasData = !!rawData.trim();
+  const hasInst = !!QRC.getInstance();
+
+  // Update persistent QR_MOUNT class and bg without replacing it
+  QR_MOUNT.className = (!hasData ? "qr-mount empty" : "qr-mount") +
+    (S.verifyStatus === "pass" ? " pass" : S.verifyStatus === "fail" ? " fail" : "");
+  QR_MOUNT.style.background = hasData ? S.bgColor : "";
+
+  // Show/hide empty hint
+  let hint = QR_MOUNT.querySelector(".empty-hint");
+  if (!hasData) {
+    if (!hint) {
+      hint = document.createElement("div"); hint.className = "empty-hint";
+      hint.innerHTML = `<div class="big">▣</div><div class="txt">Enter data to generate</div>`;
+      // Remove scanline if any
+      const sl = QR_MOUNT.querySelector(".scanline-wrap"); if(sl) sl.remove();
+      QR_MOUNT.appendChild(hint);
+    }
   } else {
-    section.classList.add('visible');
-    toggle.textContent = '▲ Advanced Options';
+    if (hint) hint.remove();
   }
-});
 
-// Manual version override
-document.querySelectorAll('.ring-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.ring-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    manualVersion = btn.dataset.version;
-    updateCapacityIndicator();
-  });
-});
+  // Scanline while verifying
+  let slWrap = QR_MOUNT.querySelector(".scanline-wrap");
+  if (S.verifyStatus === "checking") {
+    if (!slWrap) {
+      slWrap = document.createElement("div"); slWrap.className = "scanline-wrap";
+      slWrap.innerHTML = `<div class="scanline"></div>`;
+      QR_MOUNT.appendChild(slWrap);
+    }
+  } else { if (slWrap) slWrap.remove(); }
 
-window.addEventListener('load', () => {
-  updateCapacityIndicator();
-  generate();
-});
+  let vBadge = null;
+  if (S.verifyStatus === "checking") vBadge = h("span", { class: "vbadge checking" }, "⟳ verifying…");
+  else if (S.verifyStatus === "pass") vBadge = h("span", { class: "vbadge pass" }, "✓ canvas decoded");
+  else if (S.verifyStatus === "fail") vBadge = h("span", { class: "vbadge fail" }, "⚠ verify failed");
+
+  return h("div", { class: "sec" },
+    h("div", { class: "prev-hdr" },
+      h("div", { class: "prev-title" }, "◈ Preview"),
+      vBadge
+    ),
+    // QR_MOUNT is inserted here by render() transplant logic
+    h("div", { id: "qr-mount-slot" }),
+    // Always show verify disclaimer when pass badge is visible
+    S.verifyStatus === "pass"
+      ? h("div", { style: "font-size:10px;color:rgba(255,255,255,.18);text-align:center;margin-bottom:10px;font-family:'Space Mono',monospace;line-height:1.5" },
+          "Canvas decoded OK. Real scan depends on print quality + lighting."
+        )
+      : null,
+    hasData && hasInst ? h("div", {},
+      h("div", { class: "dl-row" },
+        h("button", { class: "btn-main", onClick: () => dlQR("png") }, "⬇ Download PNG"),
+        h("button", { class: "btn-out",  onClick: () => dlQR("svg") }, "⬇ SVG")
+      ),
+      h("div", { class: "cp-row" },
+        h("button", { class: "btn-g" + (S.imgCopied ? " done" : ""), onClick: copyImg }, S.imgCopied ? "✓ Copied!" : "⎘ Copy Image"),
+        h("button", { class: "btn-g" + (S.dataCopied ? " done" : ""), onClick: () => copyData(rawData) }, S.dataCopied ? "✓ Copied!" : "⎘ Copy Data")
+      ),
+      h("div", { class: "data-chip" }, h("span", { style: "color:var(--a)" }, "▶ "), rawData),
+      h("div", { class: "cam-tip" }, "📱 Point phone camera directly at QR — most native cameras decode without an app")
+    ) : null
+  );
+}
+
+function rCustomize(status) {
+  return h("div", { class: "sec" },
+    h("div", { class: "sec-label" }, "◈ Customize"),
+    h("div", { class: "ctabs" },
+      ["style","colors","advanced"].map(id => h("button", {
+        class: "ctab" + (S.customTab === id ? " on" : ""),
+        onClick: () => update({ customTab: id })
+      }, id[0].toUpperCase() + id.slice(1)))
+    ),
+    S.customTab === "style"    ? rStyleTab() : null,
+    S.customTab === "colors"   ? rColorsTab() : null,
+    S.customTab === "advanced" ? rAdvancedTab(status) : null
+  );
+}
+
+/* ── Main render ──────────────────────────────────────────────────── */
+let _prevRenderSig = null;
+
+function render() {
+  const root = document.getElementById("root");
+  if (!root) return;
+
+  const rawData = buildData(S.qrType, S.fields);
+  const hasData = !!rawData.trim();
+  const status = scanStatus(S.fgColor, S.bgColor, S.ecLevel, S.logoSrc ? S.logoSize : 0, rawData.length, S.hasMargin, S.useGrad);
+
+  // Render signature — skip full rebuild if only verify status changed
+  const uiSig = [S.qrType, S.customTab, S.dotType, S.eyeRadius, S.fgColor, S.bgColor, S.useGrad, S.gradEnd, S.ecLevel, S.logoSrc?"y":"n", S.logoSize, S.hasMargin, status.level, hasData, !!QRC.getInstance()].join("|");
+  const shouldRebuild = uiSig !== _prevRenderSig;
+
+  // Always update QR_MOUNT state (class, bg, scanline, verify badge)
+  // This is cheap and handles verify status changes without full rebuild
+  QR_MOUNT.className = (!hasData ? "qr-mount empty" : "qr-mount") +
+    (S.verifyStatus === "pass" ? " pass" : S.verifyStatus === "fail" ? " fail" : "");
+  QR_MOUNT.style.background = hasData ? S.bgColor : "";
+  let slWrap = QR_MOUNT.querySelector(".scanline-wrap");
+  if (S.verifyStatus === "checking") {
+    if (!slWrap) { slWrap = document.createElement("div"); slWrap.className = "scanline-wrap"; slWrap.innerHTML = `<div class="scanline"></div>`; QR_MOUNT.appendChild(slWrap); }
+  } else { if (slWrap) slWrap.remove(); }
+  let hint = QR_MOUNT.querySelector(".empty-hint");
+  if (!hasData) { if (!hint) { hint = document.createElement("div"); hint.className = "empty-hint"; hint.innerHTML = `<div class="big">▣</div><div class="txt">Enter data to generate</div>`; QR_MOUNT.appendChild(hint); } }
+  else { if (hint) hint.remove(); }
+
+  if (!shouldRebuild) return;
+  _prevRenderSig = uiSig;
+
+  // Full UI rebuild (happens on tab change, style change, etc. — not on every keystroke via scheduleQR)
+  const tree = document.createElement("div");
+  tree.appendChild(rHeader());
+
+  const mainDiv = document.createElement("div"); mainDiv.className = "main";
+  const gridDiv = document.createElement("div"); gridDiv.className = "grid";
+
+  // Left column
+  const leftCol = document.createElement("div");
+
+  // Type selector section
+  const typeSec = document.createElement("div"); typeSec.className = "sec";
+  typeSec.appendChild(rTypeSelector());
+  leftCol.appendChild(typeSec);
+
+  // Content form section — uses persistent FORM_EL
+  const formSec = document.createElement("div"); formSec.className = "sec";
+  formSec.style.marginTop = "14px";
+  const formLabel = document.createElement("div"); formLabel.className = "sec-label"; formLabel.textContent = "◈ Content";
+  formSec.appendChild(formLabel);
+  formSec.appendChild(FORM_EL);
+  leftCol.appendChild(formSec);
+
+  // Customize
+  leftCol.appendChild(rCustomize(status));
+  gridDiv.appendChild(leftCol);
+
+  // Right column — preview
+  const rightCol = document.createElement("div"); rightCol.className = "preview-wrap";
+  const prevSec = rPreviewPanel(rawData);
+  rightCol.appendChild(prevSec);
+  gridDiv.appendChild(rightCol);
+
+  mainDiv.appendChild(gridDiv);
+  tree.appendChild(mainDiv);
+
+  // Swap root
+  root.innerHTML = "";
+  while (tree.firstChild) root.appendChild(tree.firstChild);
+
+  // Transplant persistent QR_MOUNT into its slot
+  const slot = document.getElementById("qr-mount-slot");
+  if (slot) slot.replaceWith(QR_MOUNT);
+
+  // Patch form inputs for current type (in-place, cursor-safe)
+  buildForm(FORM_EL);
+
+  // Update verify badge in preview header (without rebuilding)
+  updateVerifyBadge();
+}
+
+function updateVerifyBadge() {
+  // Find the badge container in current DOM and patch just the badge
+  const prevHdr = document.querySelector(".prev-hdr");
+  if (!prevHdr) return;
+  let badge = prevHdr.querySelector(".vbadge");
+  if (S.verifyStatus === null) { if (badge) badge.remove(); return; }
+
+  if (!badge) { badge = document.createElement("span"); prevHdr.appendChild(badge); }
+  if (S.verifyStatus === "checking") { badge.className = "vbadge checking"; badge.textContent = "⟳ verifying…"; }
+  else if (S.verifyStatus === "pass") { badge.className = "vbadge pass"; badge.textContent = "✓ canvas decoded"; }
+  else if (S.verifyStatus === "fail") { badge.className = "vbadge fail"; badge.textContent = "⚠ verify failed"; }
+
+  // Also update disclaimer text
+  const slot = QR_MOUNT.nextElementSibling;
+  // handled by full render on sig change
+}
+
+/* ── Boot ─────────────────────────────────────────────────────────── */
+render();
+buildForm(FORM_EL);
+// Trigger initial QR if fields were restored from localStorage
+if (Object.keys(S.fields).length > 0) triggerQR();
 </script>
 </body>
 </html>
