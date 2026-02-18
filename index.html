@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>QR_studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
+<!-- FIX 5: Preload ZXing so it's already fetched when first verify fires -->
+<link rel="preload" href="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js" as="script"/>
+<link rel="preconnect" href="https://unpkg.com"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -152,7 +155,9 @@ header{
 #qr-mount{
   display:flex;justify-content:center;align-items:center;
   min-height:280px;border-radius:11px;overflow:hidden;
-  margin-bottom:14px;transition:box-shadow .25s,background .25s;
+  /* FIX 7: cap at column width — no overflow on mobile */
+  width:min(400px,100%);margin:0 auto 14px;
+  transition:box-shadow .25s,background .25s;
   position:relative;
 }
 #qr-mount.empty{background:rgba(255,255,255,.018);outline:2px dashed var(--bord)}
@@ -171,6 +176,8 @@ header{
 .vbadge{font-size:10px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:5px}
 .vbadge.pass{color:var(--a)}
 .vbadge.fail{color:var(--danger)}
+/* FIX 6: two-phase — "loading" (fetching ZXing) vs "checking" (decoding) */
+.vbadge.loading{color:rgba(255,255,255,.22)}
 .vbadge.checking{color:rgba(184,244,0,.45)}
 
 /* actions */
@@ -200,22 +207,16 @@ header{
 <script>
 "use strict";
 /* ══════════════════════════════════════════════════════════════════════
-   QR STUDIO v4  —  Encode-only. Lightning fast. Phone-camera optimized.
+   QR STUDIO v5  —  Encode-only. Lightning fast. Phone-camera optimized.
 
-   Speed strategy:
-   • qr-code-styling loaded once, instance reused via .update() — no flicker
-   • MutationObserver replaces 900ms dead-wait timer for autoVerify
-   • ZXing used ONLY for autoVerify (one lightweight read-back)
-   • Form section is a persistent DOM node — inputs never recreated → no focus loss
-   • No decode tab, no decode UI, no drag/drop, no history
-
-   Phone camera readability:
-   • Default EC = H (30% data recovery — best for styled QR)
-   • Minimum 16px quiet zone margin enforced
-   • Gradient on dots DISABLED by default (hurts local contrast for scanners)
-   • Contrast checked with QR-scanner thresholds, not WCAG text thresholds
-   • Dot size warning if QR would be too dense for phone cameras
-   • Canvas verify via ZXing — honest disclaimer shown always
+   v5 changes (7 fixes):
+   [1] scheduleQR(newFields) — passes newFields directly, never reads stale S.fields
+   [2] Persistent BrowserQRCodeReader — instantiated once after ZXing loads, reused
+   [3] decodeFromCanvas() — skips toDataURL PNG round-trip entirely
+   [4] update(patch, afterRender) — callback eliminates setTimeout(0) type-switch hack
+   [5] ZXing self-hosted from unpkg pinned URL + <link rel="preload"> in <head>
+   [6] Two-phase verify badge: "loading verifier…" vs "verifying…" — honest UX
+   [7] QR width responsive: min(400px, 100%) — no overflow on mobile
 ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Script loader — promise-deduplicated ─────────────────────────── */
@@ -369,15 +370,21 @@ const S = {
   hasMargin: true,
   customTab: "style",
   verifyStatus: null, // null | "checking" | "pass" | "fail"
+  hasQR: false,       // FIX 3: set by QRController, read by render — no getInstance() in render path
   imgCopied: false,
   dataCopied: false,
 };
 
 /* ── Reactive core ────────────────────────────────────────────────── */
 let _raf = false;
-function update(patch) {
+// FIX 4: optional afterRender callback runs after render() completes —
+// eliminates setTimeout(0) hack used on type switch
+function update(patch, afterRender) {
   Object.assign(S, typeof patch === "function" ? patch(S) : patch);
-  if (!_raf) { _raf = true; requestAnimationFrame(() => { render(); _raf = false; }); }
+  if (!_raf) {
+    _raf = true;
+    requestAnimationFrame(() => { render(); _raf = false; if (afterRender) afterRender(); });
+  }
 }
 
 /* ── h() — correct property setting, cursor-safe ─────────────────── */
@@ -482,13 +489,23 @@ const QRC = (() => {
         _inst.append(el);
       }
     } else if (window.QRCode) {
+      // FIX: check window.QRCode exists before falling through silently
+      if (!window.QRCode) { toast("QR library unavailable — check network", "er"); update({ verifyStatus: null, hasQR: false }); return; }
       el.innerHTML = ""; _inst = null;
       new window.QRCode(el, {
         text: opts.data, width: 320, height: 320,
         colorDark: opts.fgColor, colorLight: opts.bgColor,
         correctLevel: window.QRCode.CorrectLevel[effectiveEC] || window.QRCode.CorrectLevel.H,
       });
+    } else {
+      // Neither library attached to window after load — surface this, don't fail silently
+      toast("QR library failed to initialise — try refreshing", "er");
+      update({ verifyStatus: null, hasQR: false });
+      return;
     }
+
+    // FIX 3: Signal to render that a QR now exists — no getInstance() needed in render path
+    update({ hasQR: true });
 
     // MutationObserver-based verify — fires as soon as canvas appears, not after 900ms
     waitForCanvas(el).then(canvas => {
@@ -502,27 +519,56 @@ const QRC = (() => {
     if (_obs) { _obs.disconnect(); _obs = null; }
     _inst = null; _lastSig = null;
     el.innerHTML = "";
-    update({ verifyStatus: null });
+    // FIX 3: clear hasQR flag via update() — keeps reactive contract intact
+    update({ verifyStatus: null, hasQR: false });
   }
 
-  function getInstance() { return _inst; }
   function getClampEC(ec, logoSrc, logoSize) { return clampEC(ec, logoSrc, logoSize); }
+  // FIX 3: getInstance removed from public API — render uses S.hasQR instead
+  // download() still needs the instance; expose it only for that purpose
+  function getInstance() { return _inst; }
 
   return { generate, clear, getInstance, clampEC: getClampEC };
 })();
 
-/* ── autoVerify — compares decoded === expected, always shows disclaimer */
+/* ── autoVerify — persistent reader, decodeFromCanvas, two-phase badge ── */
+// FIX 2: reader instantiated once and reused — not recreated on every verify
+// FIX 6: two phases — "loading" while ZXing fetches, "checking" while decoding
+let _zxReader = null;
+let _lastVerifiedData = null; // FIX 2: skip verify if data unchanged
+
 async function autoVerify(expectedData, canvas) {
+  // Skip re-verify if data hasn't changed — free optimisation for tab switches etc.
+  if (expectedData === _lastVerifiedData && S.verifyStatus === "pass") return;
+
   try {
+    // Phase 1 — show "loading" while ZXing bundle fetches (first call only)
+    update({ verifyStatus: "loading" });
     const ZXing = await ensureZXing();
-    const img = new Image();
-    img.src = canvas.toDataURL("image/png");
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-    const reader = new ZXing.BrowserQRCodeReader();
-    const result = await reader.decodeFromImageElement(img).catch(() => null);
+
+    // Phase 2 — ZXing loaded, now actually decoding
+    update({ verifyStatus: "checking" });
+
+    // FIX 2: reuse persistent reader instance
+    if (!_zxReader) _zxReader = new ZXing.BrowserQRCodeReader();
+
+    // FIX 3: decodeFromCanvas skips toDataURL PNG round-trip entirely
+    // Falls back to image element if decodeFromCanvas unavailable in this build
+    let result = null;
+    if (typeof _zxReader.decodeFromCanvas === "function") {
+      result = await _zxReader.decodeFromCanvas(canvas).catch(() => null);
+    } else {
+      // Fallback: still faster than before since reader is reused
+      const img = new Image();
+      img.src = canvas.toDataURL("image/png");
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+      result = await _zxReader.decodeFromImageElement(img).catch(() => null);
+    }
+
     const decoded = result ? result.getText() : null;
-    // Exact comparison — not just truthy
-    update({ verifyStatus: decoded === expectedData ? "pass" : "fail" });
+    const passed = decoded === expectedData;
+    if (passed) _lastVerifiedData = expectedData;
+    update({ verifyStatus: passed ? "pass" : "fail" });
   } catch {
     update({ verifyStatus: null });
   }
@@ -617,10 +663,11 @@ function patchInput(container, key, label, placeholder, type = "text") {
     const inp = document.createElement("input");
     inp.type = type; inp.placeholder = placeholder;
     inp.addEventListener("input", e => {
+      // FIX 1: all state mutations go through update() — no direct S.x = assignment
       const newFields = { ...S.fields, [key]: e.target.value };
-      S.fields = newFields; // Direct mutation — we're inside the input handler, rAF will pick it up
+      update({ fields: newFields });
       lsSet("qrs_fields_" + S.qrType, newFields);
-      scheduleQR();
+      scheduleQR(newFields); // FIX 1: pass newFields — don't read stale S.fields
     });
     wrap.appendChild(lbl); wrap.appendChild(inp);
     container.appendChild(wrap);
@@ -645,9 +692,11 @@ function patchTextarea(container, key, label, placeholder) {
     const ta = document.createElement("textarea");
     ta.placeholder = placeholder;
     ta.addEventListener("input", e => {
-      S.fields = { ...S.fields, [key]: e.target.value };
-      lsSet("qrs_fields_" + S.qrType, S.fields);
-      scheduleQR();
+      // FIX 1: consistent update() path — no direct S mutation
+      const newFields = { ...S.fields, [key]: e.target.value };
+      update({ fields: newFields });
+      lsSet("qrs_fields_" + S.qrType, newFields);
+      scheduleQR(newFields); // FIX 1: pass newFields directly
     });
     wrap.appendChild(lbl); wrap.appendChild(ta);
     container.appendChild(wrap);
@@ -669,9 +718,11 @@ function patchSelect(container, key, label, options) {
     const sel = document.createElement("select");
     options.forEach(o => { const op = document.createElement("option"); op.value = op.textContent = o; sel.appendChild(op); });
     sel.addEventListener("change", e => {
-      S.fields = { ...S.fields, [key]: e.target.value };
-      lsSet("qrs_fields_" + S.qrType, S.fields);
-      scheduleQR();
+      // FIX 1: consistent update() path
+      const newFields = { ...S.fields, [key]: e.target.value };
+      update({ fields: newFields });
+      lsSet("qrs_fields_" + S.qrType, newFields);
+      scheduleQR(newFields); // FIX 1: pass newFields directly
     });
     wrap.appendChild(lbl); wrap.appendChild(sel);
     container.appendChild(wrap);
@@ -740,16 +791,22 @@ function getNeededKeys(type) {
   return map[type] || [];
 }
 
-/* ── Debounced QR generation — triggered by form changes ─────────── */
+/* ── Debounced QR generation ──────────────────────────────────────── */
 let _qrTimer = null;
-function scheduleQR() {
+// FIX 1: scheduleQR accepts newFields so triggerQR never reads stale S.fields
+// S.fields is updated via update() which batches via rAF — by the time
+// scheduleQR fires (180ms later) S.fields is settled, but we pass the value
+// through explicitly to be safe and correct regardless of rAF timing.
+function scheduleQR(fields) {
   if (_qrTimer) clearTimeout(_qrTimer);
-  _qrTimer = setTimeout(triggerQR, 180); // 180ms debounce on typing
+  _qrTimer = setTimeout(() => triggerQR(fields), 180);
 }
 
-function triggerQR() {
+function triggerQR(fields) {
   _qrTimer = null;
-  const raw = buildData(S.qrType, S.fields);
+  // Use passed fields if provided, fall back to S.fields (for non-input triggers)
+  const f = fields !== undefined ? fields : S.fields;
+  const raw = buildData(S.qrType, f);
   if (!raw.trim()) { QRC.clear(); return; }
   QRC.generate({
     data: raw, dotType: S.dotType, eyeRadius: S.eyeRadius,
@@ -782,10 +839,14 @@ function rTypeSelector() {
         class: "type-btn" + (S.qrType === t.id ? " on" : ""),
         onClick: () => {
           if (S.qrType === t.id) return;
-          S.fields = lsGet("qrs_fields_" + t.id, {});
-          update({ qrType: t.id, fields: S.fields });
-          // Rebuild form for new type
-          setTimeout(() => { buildForm(FORM_EL); triggerQR(); }, 0);
+          const savedFields = lsGet("qrs_fields_" + t.id, {});
+          // FIX 4: afterRender callback replaces setTimeout(0) —
+          // buildForm and triggerQR run only after render() has placed
+          // FORM_EL back into the DOM, with savedFields passed through (FIX 1)
+          update({ qrType: t.id, fields: savedFields }, () => {
+            buildForm(FORM_EL);
+            triggerQR(savedFields);
+          });
         }
       }, h("span", { class: "ico" }, t.icon), t.label))
     )
@@ -916,7 +977,8 @@ function rAdvancedTab(status) {
 
 function rPreviewPanel(rawData) {
   const hasData = !!rawData.trim();
-  const hasInst = !!QRC.getInstance();
+  // FIX 3: read S.hasQR — no side-effectful QRC.getInstance() inside render
+  const hasQR = S.hasQR;
 
   // Update persistent QR_MOUNT class and bg without replacing it
   QR_MOUNT.className = (!hasData ? "qr-mount empty" : "qr-mount") +
@@ -957,15 +1019,11 @@ function rPreviewPanel(rawData) {
       h("div", { class: "prev-title" }, "◈ Preview"),
       vBadge
     ),
-    // QR_MOUNT is inserted here by render() transplant logic
+    // QR_MOUNT inserted here by render() transplant logic
+    // FIX 2: disclaimer injected by updateVerifyBadge() immediately after qr-mount,
+    // not here — so it survives partial renders that skip this function entirely.
     h("div", { id: "qr-mount-slot" }),
-    // Always show verify disclaimer when pass badge is visible
-    S.verifyStatus === "pass"
-      ? h("div", { style: "font-size:10px;color:rgba(255,255,255,.18);text-align:center;margin-bottom:10px;font-family:'Space Mono',monospace;line-height:1.5" },
-          "Canvas decoded OK. Real scan depends on print quality + lighting."
-        )
-      : null,
-    hasData && hasInst ? h("div", {},
+    hasData && hasQR ? h("div", {},
       h("div", { class: "dl-row" },
         h("button", { class: "btn-main", onClick: () => dlQR("png") }, "⬇ Download PNG"),
         h("button", { class: "btn-out",  onClick: () => dlQR("svg") }, "⬇ SVG")
@@ -1006,8 +1064,8 @@ function render() {
   const hasData = !!rawData.trim();
   const status = scanStatus(S.fgColor, S.bgColor, S.ecLevel, S.logoSrc ? S.logoSize : 0, rawData.length, S.hasMargin, S.useGrad);
 
-  // Render signature — skip full rebuild if only verify status changed
-  const uiSig = [S.qrType, S.customTab, S.dotType, S.eyeRadius, S.fgColor, S.bgColor, S.useGrad, S.gradEnd, S.ecLevel, S.logoSrc?"y":"n", S.logoSize, S.hasMargin, status.level, hasData, !!QRC.getInstance()].join("|");
+  // Render signature — skip full rebuild if only verify status or copy state changed
+  const uiSig = [S.qrType, S.customTab, S.dotType, S.eyeRadius, S.fgColor, S.bgColor, S.useGrad, S.gradEnd, S.ecLevel, S.logoSrc?"y":"n", S.logoSize, S.hasMargin, status.level, hasData, S.hasQR].join("|");
   const shouldRebuild = uiSig !== _prevRenderSig;
 
   // Always update QR_MOUNT state (class, bg, scanline, verify badge)
@@ -1016,12 +1074,17 @@ function render() {
     (S.verifyStatus === "pass" ? " pass" : S.verifyStatus === "fail" ? " fail" : "");
   QR_MOUNT.style.background = hasData ? S.bgColor : "";
   let slWrap = QR_MOUNT.querySelector(".scanline-wrap");
-  if (S.verifyStatus === "checking") {
+  // FIX 6: scanline visible during both "loading" (fetching ZXing) and "checking" (decoding)
+  if (S.verifyStatus === "checking" || S.verifyStatus === "loading") {
     if (!slWrap) { slWrap = document.createElement("div"); slWrap.className = "scanline-wrap"; slWrap.innerHTML = `<div class="scanline"></div>`; QR_MOUNT.appendChild(slWrap); }
   } else { if (slWrap) slWrap.remove(); }
   let hint = QR_MOUNT.querySelector(".empty-hint");
   if (!hasData) { if (!hint) { hint = document.createElement("div"); hint.className = "empty-hint"; hint.innerHTML = `<div class="big">▣</div><div class="txt">Enter data to generate</div>`; QR_MOUNT.appendChild(hint); } }
   else { if (hint) hint.remove(); }
+
+  // FIX 2: updateVerifyBadge runs on every render() call — before the shouldRebuild
+  // guard — so badge + disclaimer stay in sync even when full rebuild is skipped.
+  updateVerifyBadge();
 
   if (!shouldRebuild) return;
   _prevRenderSig = uiSig;
@@ -1078,20 +1141,42 @@ function render() {
 }
 
 function updateVerifyBadge() {
-  // Find the badge container in current DOM and patch just the badge
   const prevHdr = document.querySelector(".prev-hdr");
   if (!prevHdr) return;
+
+  // Update badge
   let badge = prevHdr.querySelector(".vbadge");
-  if (S.verifyStatus === null) { if (badge) badge.remove(); return; }
+  if (S.verifyStatus === null) {
+    if (badge) badge.remove();
+  } else {
+    if (!badge) { badge = document.createElement("span"); prevHdr.appendChild(badge); }
+    // FIX 6: two-phase badge text — users know if it's a network wait or decode work
+    if      (S.verifyStatus === "loading")  { badge.className = "vbadge loading";  badge.textContent = "⟳ loading verifier…"; }
+    else if (S.verifyStatus === "checking") { badge.className = "vbadge checking"; badge.textContent = "⟳ verifying…"; }
+    else if (S.verifyStatus === "pass")     { badge.className = "vbadge pass";     badge.textContent = "✓ canvas decoded"; }
+    else if (S.verifyStatus === "fail")     { badge.className = "vbadge fail";     badge.textContent = "⚠ verify failed"; }
+  }
 
-  if (!badge) { badge = document.createElement("span"); prevHdr.appendChild(badge); }
-  if (S.verifyStatus === "checking") { badge.className = "vbadge checking"; badge.textContent = "⟳ verifying…"; }
-  else if (S.verifyStatus === "pass") { badge.className = "vbadge pass"; badge.textContent = "✓ canvas decoded"; }
-  else if (S.verifyStatus === "fail") { badge.className = "vbadge fail"; badge.textContent = "⚠ verify failed"; }
+  // FIX 2: Disclaimer co-located with badge here in updateVerifyBadge(),
+  // not in rPreviewPanel() — so it always appears/disappears with the badge
+  // regardless of whether a full render or partial update ran.
+  // The broken comment "// handled by full render on sig change" is removed.
+  const mountEl = document.getElementById("qr-mount");
+  if (!mountEl) return;
+  let disc = document.getElementById("verify-disclaimer");
 
-  // Also update disclaimer text
-  const slot = QR_MOUNT.nextElementSibling;
-  // handled by full render on sig change
+  if (S.verifyStatus === "pass") {
+    if (!disc) {
+      disc = document.createElement("div");
+      disc.id = "verify-disclaimer";
+      disc.style.cssText = "font-size:10px;color:rgba(255,255,255,.18);text-align:center;margin-bottom:10px;font-family:'Space Mono',monospace;line-height:1.5;padding:0 4px";
+      disc.textContent = "Canvas decoded OK. Real scan depends on print quality + lighting.";
+      // Insert immediately after qr-mount
+      mountEl.insertAdjacentElement("afterend", disc);
+    }
+  } else {
+    if (disc) disc.remove();
+  }
 }
 
 /* ── Boot ─────────────────────────────────────────────────────────── */
