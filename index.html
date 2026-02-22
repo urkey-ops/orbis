@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>QR_studio v9.1</title>
+<title>QR_studio v9.2</title>
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
            script-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
@@ -135,6 +135,7 @@ header{
 #qr-mount.empty{background:rgba(255,255,255,.018)!important;outline:2px dashed var(--bord)}
 #qr-mount.pass{box-shadow:0 0 0 2px var(--a),0 0 28px rgba(184,244,0,.10)}
 #qr-mount.fail{box-shadow:0 0 0 2px var(--danger),0 0 28px rgba(255,68,85,.08)}
+#qr-mount.pending canvas{opacity:.45;transition:opacity .15s}
 #qr-mount canvas{width:100%!important;height:auto!important;display:block;animation:popIn .18s ease}
 
 .scanline-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:12px}
@@ -627,8 +628,17 @@ const QRC = (() => {
 
       if (myToken !== _genToken) return; // stale — don't touch DOM
 
+      const prevVersion = S.qrVersion;
+      el.classList.remove("pending");
       el.innerHTML = "";
       el.appendChild(canvas);
+
+      // Suppress pop-in animation when version is stable (same size QR, just data changed)
+      // Only animate on first appearance or when QR density actually changes
+      if (version === prevVersion && prevVersion !== 1) {
+        canvas.style.animation = "none";
+      }
+
       update({ hasQR: true });
 
       // Verify — fast jsQR on the drawn canvas
@@ -636,6 +646,7 @@ const QRC = (() => {
 
     } catch(e) {
       if (myToken !== _genToken) return;
+      el.classList.remove("pending");
       toast(friendlyQRError(e.message), "er");
       update({ verifyStatus: null, hasQR: false, qrVersion: 1 });
     }
@@ -644,6 +655,7 @@ const QRC = (() => {
   function clear() {
     const el = mount(); if (!el) return;
     _lastSig = null; // reset so switching back to same type regenerates
+    el.classList.remove("pending");
     el.innerHTML = "";
     const hint = document.createElement("div"); hint.className = "empty-hint";
     const big  = document.createElement("div"); big.className  = "big"; big.textContent = "▣";
@@ -804,7 +816,11 @@ function patchInput(container, key, label, placeholder, type="text") {
       const errs = validateFields(S.qrType, nf);
       update({fields:nf, fieldErrs:errs});
       lsSetFields(S.qrType, nf);
-      scheduleQR(); // reads S.fields — always current after update()
+      // Paste/drop → near-instant QR. Keyboard → wait for pause.
+      const isPaste = e.inputType === "insertFromPaste" ||
+                      e.inputType === "insertFromDrop"  ||
+                      e.inputType === "insertFromPasteAsQuotation";
+      scheduleQR(isPaste);
     });
     wrap.appendChild(lbl); wrap.appendChild(inp); wrap.appendChild(err);
     container.appendChild(wrap);
@@ -828,7 +844,11 @@ function patchTextarea(container, key, label, placeholder) {
     const ta  = document.createElement("textarea"); ta.placeholder=placeholder;
     ta.addEventListener("input", e => {
       const nf = {...S.fields, [key]: e.target.value};
-      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR();
+      update({fields:nf}); lsSetFields(S.qrType, nf);
+      const isPaste = e.inputType === "insertFromPaste" ||
+                      e.inputType === "insertFromDrop"  ||
+                      e.inputType === "insertFromPasteAsQuotation";
+      scheduleQR(isPaste);
     });
     wrap.appendChild(lbl); wrap.appendChild(ta); container.appendChild(wrap);
   }
@@ -913,16 +933,25 @@ function getNeededKeys(type) {
   }[type]||[];
 }
 
-/* ── QR scheduling — 180ms debounce ─────────────────────────────── */
+/* ── QR scheduling — smart debounce ─────────────────────────────────
+   Paste / drop → 50ms  (user is done — show QR immediately)
+   Keyboard typing → 500ms (wait for pause — no keystroke-by-keystroke chaos)
+   Direct call (settings change) → 0ms via triggerQR() directly
+─────────────────────────────────────────────────────────────────── */
 let _qrTimer = null;
-function scheduleQR() {
+function scheduleQR(isPaste) {
   if (_qrTimer) clearTimeout(_qrTimer);
-  _qrTimer = setTimeout(() => triggerQR(), 180);
+  // Add pending class immediately — dims existing QR to signal update coming
+  if (S.hasQR) QR_MOUNT.classList.add("pending");
+  // Paste/drop: near-instant. Keyboard: wait for user to pause typing.
+  const delay = isPaste ? 50 : 500;
+  _qrTimer = setTimeout(() => triggerQR(), delay);
 }
 function triggerQR() {
   // Always read S.fields — never accept a passed argument that may be stale
   // from a previous debounce cycle when multiple fields fired in rapid succession
   _qrTimer = null;
+  QR_MOUNT.classList.remove("pending"); // clear dim — generation starting
   const f    = S.fields;
   const errs = validateFields(S.qrType, f);
   if (Object.keys(errs).length) { QRC.clear(); return; }
@@ -972,7 +1001,7 @@ function rHeader() {
         h("div",{class:"logo-name"},"QR",h("span",{},"_"),"studio")
       ),
       h("div",{class:"hdr-badges"},
-        h("div",{class:"hdr-badge v9"},"v9.1"),
+        h("div",{class:"hdr-badge v9"},"v9.2"),
         h("div",{class:"hdr-badge"},"ENCODE")
       )
     )
