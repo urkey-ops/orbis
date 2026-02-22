@@ -11,7 +11,7 @@
            style-src 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
            font-src https://fonts.gstatic.com;
            img-src 'self' data: blob:;
-           connect-src 'none';">
+           connect-src https://unpkg.com;">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://unpkg.com"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
@@ -492,7 +492,7 @@ function cr(fg,bg){
 /* ── Finder contrast sample [S20 confirmed] ───────────────────────── */
 function sampleFinderContrast(canvas) {
   try {
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const w = canvas.width;
     const sz = Math.floor(w * 0.08);
     const dark = [], light = [];
@@ -1297,14 +1297,17 @@ function rQRStats(rawData){
   const pct = maxCap ? Math.round(byteLen/maxCap*100) : 0;
   const vClass = S.qrVersion>25?"bad":S.qrVersion>15?"warn":"";
   const pClass = pct>90?"bad":pct>70?"warn":"";
-  return h("div",{class:"qr-stats"},
+  const chips = [
     h("div",{class:`stat-chip ${vClass}`},"Version ",h("span",{class:"sv"},"v"+S.qrVersion)),
     h("div",{class:`stat-chip ${pClass}`},"Capacity ",h("span",{class:"sv"},pct+"%")),
     h("div",{class:"stat-chip"},"Bytes ",h("span",{class:"sv"},byteLen)),
     h("div",{class:"stat-chip"},h("span",{class:"sv"},effEC)," EC"),
-    S.finderOk===false ? h("div",{class:"stat-chip bad"},h("span",{class:"sv"},"⚠")," finder") : null,
-    S.finderOk===true  ? h("div",{class:"stat-chip"},h("span",{class:"sv"},"✓")," finder") : null,
-  );
+  ];
+  if (S.finderOk===false) chips.push(h("div",{class:"stat-chip bad"},h("span",{class:"sv"},"⚠")," finder"));
+  if (S.finderOk===true)  chips.push(h("div",{class:"stat-chip"},h("span",{class:"sv"},"✓")," finder"));
+  const wrap = document.createElement("div"); wrap.className = "qr-stats";
+  chips.forEach(c => wrap.appendChild(c));
+  return wrap;
 }
 
 function rPreviewPanel(rawData){
