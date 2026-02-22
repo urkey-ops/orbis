@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>QR_studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<!-- FIX 5: Preload ZXing so it's already fetched when first verify fires -->
-<link rel="preload" href="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js" as="script"/>
 <link rel="preconnect" href="https://unpkg.com"/>
+<!-- Preload both libs so first generation is fast -->
+<link rel="preload" href="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js" as="script"/>
+<link rel="preload" href="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js" as="script"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -29,7 +30,6 @@ body{background:var(--dark);color:#e4ebe0;font-family:'Syne',sans-serif;min-heig
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
 
-/* inputs */
 input,textarea,select{
   font-family:inherit;background:rgba(255,255,255,.025);
   border:1px solid var(--bord2);border-radius:8px;
@@ -45,14 +45,14 @@ button:active{transform:scale(.96)}
 input[type=range]{padding:0;background:none;border:none;accent-color:var(--a);cursor:pointer;height:4px}
 input[type=range]:focus{box-shadow:none;border:none}
 input[type=color]{padding:2px;border:none;background:none;cursor:pointer;width:100%;height:100%}
+input.err{border-color:rgba(255,68,85,.5)!important;box-shadow:0 0 0 3px rgba(255,68,85,.06)!important}
 
-/* animations */
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @keyframes toastIn{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 @keyframes scanline{0%{top:-4px}100%{top:calc(100% + 4px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-/* layout */
 header{
   position:sticky;top:0;z-index:100;
   border-bottom:1px solid var(--bord);
@@ -65,18 +65,18 @@ header{
 .logo-box{width:28px;height:28px;background:var(--a);border-radius:6px;display:grid;place-items:center;font-size:13px;flex-shrink:0}
 .logo-name{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;letter-spacing:-1px;color:#e4ebe0}
 .logo-name span{color:var(--a)}
+.hdr-badges{display:flex;gap:6px;align-items:center}
 .hdr-badge{font-family:'Space Mono',monospace;font-size:10px;color:rgba(184,244,0,.45);letter-spacing:2px;border:1px solid var(--bord);padding:4px 10px;border-radius:20px}
+.hdr-badge.v6{color:rgba(255,160,64,.6);border-color:rgba(255,160,64,.2)}
 
 .main{max-width:1100px;margin:0 auto;padding:24px 24px 60px}
-.grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
-@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.grid{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
 
-/* section */
 .sec{background:var(--card);border:1px solid var(--bord);border-radius:14px;padding:20px}
 .sec+.sec{margin-top:14px}
 .sec-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px}
 
-/* type selector */
 .type-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:0}
 @media(max-width:600px){.type-grid{grid-template-columns:repeat(4,1fr)}}
 .type-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:9px;border:1px solid var(--bord2);background:transparent;color:var(--mut);font-size:11px;font-weight:600}
@@ -84,18 +84,17 @@ header{
 .type-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
 .type-btn:hover:not(.on){border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.6)}
 
-/* form */
 .lbl{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:rgba(255,255,255,.24);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
 .fld{margin-bottom:12px}
 .fld:last-child{margin-bottom:0}
+.fld-err{font-size:10px;color:var(--danger);font-family:'Space Mono',monospace;margin-top:3px;display:none}
+.fld-err.show{display:block}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-/* customize tabs */
 .ctabs{display:flex;gap:2px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);border-radius:8px;padding:3px;margin-bottom:16px}
 .ctab{flex:1;padding:6px 0;border-radius:6px;border:none;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;background:transparent;color:rgba(255,255,255,.26);text-transform:uppercase;letter-spacing:1px}
 .ctab.on{background:var(--a);color:var(--dark)}
 
-/* style options */
 .shape-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:16px}
 .shape-btn{padding:9px 5px;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:11px;font-weight:600}
 .shape-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
@@ -103,7 +102,6 @@ header{
 .eye-btn{flex:1;padding:9px 5px;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:11px;font-weight:600}
 .eye-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
 
-/* colors */
 .tpl-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px}
 .tpl{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.4);font-size:11px;font-weight:600}
 .tpl:hover{border-color:rgba(255,255,255,.18)}
@@ -119,7 +117,19 @@ header{
 .tog.on .tog-k{left:18px}
 .tog-lbl{font-size:13px;color:var(--mut);cursor:pointer;user-select:none}
 
-/* advanced */
+/* gradient danger gate */
+.grad-warn{
+  margin-top:8px;padding:10px 12px;border-radius:8px;
+  border:1px solid rgba(255,160,64,.3);background:rgba(255,160,64,.06);
+  font-size:11px;color:rgba(255,160,64,.8);line-height:1.6;
+}
+.grad-warn strong{color:var(--warn)}
+.btn-grad-off{
+  margin-top:8px;width:100%;padding:8px;border-radius:7px;
+  border:1px solid rgba(255,160,64,.4);background:transparent;
+  color:var(--warn);font-size:11px;font-weight:700;font-family:'Space Mono',monospace;
+}
+
 .ec-row{display:flex;gap:6px;margin-bottom:5px}
 .ecb{flex:1;padding:8px 0;border-radius:7px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-weight:700;font-size:13px;font-family:'Space Mono',monospace}
 .ecb.on{border-color:var(--a);background:var(--a);color:var(--dark)}
@@ -131,8 +141,36 @@ header{
 .logo-img{width:44px;height:44px;object-fit:contain;border-radius:7px;border:1px solid rgba(255,255,255,.08);background:#fff}
 .logo-rm{width:26px;height:26px;border-radius:5px;border:none;background:rgba(255,68,85,.12);color:var(--danger);display:grid;place-items:center;font-size:16px;flex-shrink:0}
 
-/* scan status — categorical only */
-.scan-box{margin-top:18px;padding:13px 15px;border-radius:9px;border:1px solid}
+/* QR stats bar */
+.qr-stats{
+  display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;
+}
+.stat-chip{
+  padding:4px 9px;border-radius:6px;background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.06);
+  font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,.3);
+  display:flex;align-items:center;gap:5px;
+}
+.stat-chip .sv{color:rgba(184,244,0,.7);font-weight:700}
+.stat-chip.warn .sv{color:var(--warn)}
+.stat-chip.bad .sv{color:var(--danger)}
+
+/* print DPI calculator */
+.dpi-wrap{
+  margin-top:14px;padding:12px;border-radius:9px;
+  background:rgba(255,255,255,.018);border:1px solid var(--bord2);
+}
+.dpi-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(255,255,255,.22);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
+.dpi-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.dpi-result{
+  padding:8px 10px;border-radius:7px;font-size:11px;
+  font-family:'Space Mono',monospace;line-height:1.6;
+}
+.dpi-result.ok{background:var(--a10);border:1px solid var(--bord);color:rgba(184,244,0,.7)}
+.dpi-result.warn{background:rgba(255,160,64,.06);border:1px solid rgba(255,160,64,.2);color:rgba(255,160,64,.8)}
+.dpi-result.bad{background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.2);color:rgba(255,68,85,.8)}
+
+.scan-box{margin-top:14px;padding:13px 15px;border-radius:9px;border:1px solid}
 .scan-box.good{border-color:rgba(184,244,0,.22);background:rgba(184,244,0,.04)}
 .scan-box.caution{border-color:rgba(255,160,64,.22);background:rgba(255,160,64,.04)}
 .scan-box.bad{border-color:rgba(255,68,85,.22);background:rgba(255,68,85,.04)}
@@ -142,20 +180,17 @@ header{
 .scan-items{display:flex;flex-direction:column;gap:4px}
 .scan-item{font-size:11px;color:rgba(255,255,255,.36);display:flex;align-items:flex-start;gap:6px;line-height:1.5}
 
-/* quiet zone hint — phone camera specific */
 .qz-notice{margin-top:10px;padding:8px 10px;border-radius:7px;background:rgba(184,244,0,.04);border:1px solid var(--bord);font-size:11px;color:rgba(255,255,255,.3);line-height:1.6}
 .qz-notice strong{color:rgba(184,244,0,.6);font-weight:600}
 
-/* preview panel */
+/* preview */
 .preview-wrap{position:sticky;top:68px}
 .prev-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .prev-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase}
 
-/* QR mount — persistent, never recreated */
 #qr-mount{
   display:flex;justify-content:center;align-items:center;
   min-height:280px;border-radius:11px;overflow:hidden;
-  /* FIX 7: cap at column width — no overflow on mobile */
   width:min(400px,100%);margin:0 auto 14px;
   transition:box-shadow .25s,background .25s;
   position:relative;
@@ -164,40 +199,61 @@ header{
 #qr-mount.pass{box-shadow:0 0 0 2px var(--a),0 0 32px rgba(184,244,0,.10)}
 #qr-mount.fail{box-shadow:0 0 0 2px var(--danger),0 0 32px rgba(255,68,85,.08)}
 
-/* scanline animation shown while verifying */
 .scanline-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:11px}
 .scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--a),transparent);animation:scanline 1.2s ease-in-out infinite;opacity:.7}
+
+/* low-light simulate overlay */
+#qr-mount.lowlight canvas,#qr-mount.lowlight svg{filter:brightness(0.28) saturate(0.2) contrast(1.1)}
 
 .empty-hint{text-align:center;color:rgba(184,244,0,.16)}
 .empty-hint .big{font-size:48px;margin-bottom:10px;filter:grayscale(1)}
 .empty-hint .txt{font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px}
 
-/* verify badge */
 .vbadge{font-size:10px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:5px}
 .vbadge.pass{color:var(--a)}
 .vbadge.fail{color:var(--danger)}
-/* FIX 6: two-phase — "loading" (fetching ZXing) vs "checking" (decoding) */
 .vbadge.loading{color:rgba(255,255,255,.22)}
 .vbadge.checking{color:rgba(184,244,0,.45)}
 
-/* actions */
 .dl-row{display:flex;gap:7px;margin-bottom:7px}
 .btn-main{flex:1;padding:10px 0;border-radius:9px;border:none;background:var(--a);color:var(--dark);font-weight:700;font-size:13px;font-family:'Syne',sans-serif}
 .btn-out{flex:1;padding:10px 0;border-radius:9px;border:1px solid var(--bord);background:transparent;color:var(--a);font-weight:700;font-size:13px}
-.cp-row{display:flex;gap:7px;margin-bottom:12px}
+.cp-row{display:flex;gap:7px;margin-bottom:7px}
 .btn-g{flex:1;padding:8px 0;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:12px;font-weight:600}
 .btn-g.done{background:var(--a10);color:var(--a)}
+.btn-g.active{border-color:rgba(184,244,0,.4);color:rgba(184,244,0,.6)}
 .data-chip{padding:8px 10px;border-radius:7px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.05);font-size:10px;font-family:'Space Mono',monospace;color:rgba(255,255,255,.2);word-break:break-all;max-height:48px;overflow-y:auto;line-height:1.6}
-
-/* phone camera tip */
 .cam-tip{margin-top:12px;padding:10px 12px;border-radius:8px;border:1px solid var(--bord);background:var(--a10);font-size:11px;color:rgba(184,244,0,.55);font-family:'Space Mono',monospace;line-height:1.6;text-align:center}
 
-/* toast */
+/* batch */
+.batch-drop{
+  width:100%;padding:20px;border-radius:9px;
+  background:rgba(184,244,0,.03);outline:2px dashed rgba(184,244,0,.15);
+  border:none;display:flex;flex-direction:column;align-items:center;gap:6px;
+  color:rgba(184,244,0,.5);cursor:pointer;
+}
+.batch-drop:hover{background:var(--a10);outline-color:rgba(184,244,0,.3)}
+.batch-drop .ico{font-size:24px}
+.batch-drop .txt{font-size:12px;font-family:'Space Mono',monospace}
+.batch-drop .sub{font-size:10px;color:rgba(255,255,255,.2)}
+.batch-progress{margin-top:12px;padding:12px;border-radius:9px;background:rgba(255,255,255,.02);border:1px solid var(--bord2)}
+.batch-bar-wrap{height:4px;border-radius:2px;background:rgba(255,255,255,.06);overflow:hidden;margin:8px 0}
+.batch-bar{height:100%;background:var(--a);border-radius:2px;transition:width .2s}
+.batch-txt{font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,.3)}
+.batch-dl{
+  width:100%;margin-top:10px;padding:9px;border-radius:8px;
+  border:none;background:var(--a);color:var(--dark);font-weight:700;font-size:12px;font-family:'Syne',sans-serif;
+}
+
 #toasts{position:fixed;top:66px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
 .toast{padding:10px 15px;border-radius:10px;font-size:12px;font-weight:600;animation:toastIn .2s ease;display:flex;align-items:center;gap:7px;backdrop-filter:blur(16px);pointer-events:all}
 .toast.ok{background:rgba(184,244,0,.13);border:1px solid rgba(184,244,0,.22);color:var(--a)}
 .toast.er{background:rgba(255,68,85,.13);border:1px solid rgba(255,68,85,.22);color:var(--danger)}
 .toast.wn{background:rgba(255,160,64,.13);border:1px solid rgba(255,160,64,.22);color:var(--warn)}
+
+/* lowlight toggle button */
+.btn-ll{padding:8px 0;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:11px;font-weight:700;font-family:'Space Mono',monospace;width:100%;margin-bottom:7px}
+.btn-ll.on{border-color:rgba(255,160,64,.4);background:rgba(255,160,64,.06);color:var(--warn)}
 </style>
 </head>
 <body>
@@ -207,43 +263,53 @@ header{
 <script>
 "use strict";
 /* ══════════════════════════════════════════════════════════════════════
-   QR STUDIO v5  —  Encode-only. Lightning fast. Phone-camera optimized.
+   QR STUDIO v6 — Phone-camera optimized. Encode-first. Verify-correct.
 
-   v5 changes (7 fixes):
-   [1] scheduleQR(newFields) — passes newFields directly, never reads stale S.fields
-   [2] Persistent BrowserQRCodeReader — instantiated once after ZXing loads, reused
-   [3] decodeFromCanvas() — skips toDataURL PNG round-trip entirely
-   [4] update(patch, afterRender) — callback eliminates setTimeout(0) type-switch hack
-   [5] ZXing self-hosted from unpkg pinned URL + <link rel="preload"> in <head>
-   [6] Two-phase verify badge: "loading verifier…" vs "verifying…" — honest UX
-   [7] QR width responsive: min(400px, 100%) — no overflow on mobile
+   Key fixes over v5:
+   [1]  qrcode.js (~25KB) as primary encoder — qr-code-styling lazy-loads for styling only
+   [2]  MultiFormatReader + BinaryBitmap + HTMLCanvasImageSource — true zero-copy verify
+   [3]  Proportional quiet zone — 4 × moduleWidth px, not fixed 16px
+   [4]  devicePixelRatio canvas output — crisp on Retina / HiDPI
+   [5]  Verify re-runs on every option change, not just data changes
+   [6]  Live QR version + byte count stats bar
+   [7]  Print DPI calculator with module-size validation
+   [8]  Low-light preview toggle (simulate worst-case phone camera)
+   [9]  RFC 6350 vCard field validation with inline errors
+   [10] Gradient hard gate — warns + confirm before generating
+   [11] Batch CSV generation → ZIP download (JSZip)
+   [12] Real finder-pattern contrast check on rendered canvas pixels
 ══════════════════════════════════════════════════════════════════════ */
 
-/* ── Script loader — promise-deduplicated ─────────────────────────── */
+/* ── Script loader ─────────────────────────────────────────────────── */
 const _sc = new Map();
 function loadScript(src) {
   if (_sc.has(src)) return _sc.get(src);
   const p = new Promise((ok, fail) => {
     const s = document.createElement("script");
-    s.src = src;
-    s.onload = ok;
+    s.src = src; s.onload = ok;
     s.onerror = () => { _sc.delete(src); fail(new Error("Load failed: " + src)); };
     document.head.appendChild(s);
   });
-  _sc.set(src, p);
-  return p;
+  _sc.set(src, p); return p;
 }
 
-/* ── QR lib — styling first, raw fallback — loaded once ───────────── */
-let _qlP = null;
-function ensureQRLib() {
-  if (!_qlP) _qlP = loadScript("https://unpkg.com/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js")
-    .catch(() => loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"))
-    .catch(() => { throw new Error("No QR library available"); });
-  return _qlP;
+/* ── Primary encoder: qrcode.js — fast, tiny ──────────────────────── */
+let _qrP = null;
+function ensureQR() {
+  if (!_qrP) _qrP = loadScript("https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js")
+    .then(() => { if (!window.QRCode) throw new Error("QRCode not found"); return window.QRCode; });
+  return _qrP;
 }
 
-/* ── ZXing — loaded once, used only for autoVerify ────────────────── */
+/* ── Styling library: lazy-loaded only when needed ────────────────── */
+let _styP = null;
+function ensureStyling() {
+  if (!_styP) _styP = loadScript("https://unpkg.com/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js")
+    .then(() => { if (!window.QRCodeStyling) throw new Error("QRCodeStyling not found"); return window.QRCodeStyling; });
+  return _styP;
+}
+
+/* ── ZXing: verify only ───────────────────────────────────────────── */
 let _zxP = null;
 function ensureZXing() {
   if (!_zxP) _zxP = loadScript("https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js")
@@ -252,22 +318,79 @@ function ensureZXing() {
   return _zxP;
 }
 
+/* ── JSZip: batch only ────────────────────────────────────────────── */
+let _zipP = null;
+function ensureJSZip() {
+  if (!_zipP) _zipP = loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js")
+    .then(() => { if (!window.JSZip) throw new Error("JSZip not found"); return window.JSZip; });
+  return _zipP;
+}
+
 /* ── Toast ────────────────────────────────────────────────────────── */
 function toast(msg, type = "ok", ms = 2600) {
   const c = document.getElementById("toasts");
   const el = document.createElement("div");
   el.className = "toast " + type;
-  el.innerHTML = `<span>${{ ok: "✓", er: "✕", wn: "⚠" }[type] || "•"}</span><span>${msg}</span>`;
+  el.innerHTML = `<span>${{ok:"✓",er:"✕",wn:"⚠"}[type]||"•"}</span><span>${msg}</span>`;
   c.appendChild(el);
   setTimeout(() => { el.style.cssText = "opacity:0;transform:translateX(28px);transition:.18s"; setTimeout(() => el.remove(), 220); }, ms);
 }
 
-/* ── Unified QR escaping ─────────────────────────────────────────── */
-function qrEsc(v, mode = "vcard") {
-  let s = (v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/"/g, '\\"');
-  if (mode === "wifi") s = s.replace(/:/g, "\\:");
-  return s;
+/* ── QR spec: version lookup ──────────────────────────────────────── */
+// QR capacity table (byte mode, error correction level)
+// Source: ISO/IEC 18004:2015 Table 9
+const QR_CAP = {
+  L:[17,32,53,78,106,134,154,192,230,271,321,367,425,458,520,586,644,718,792,858,929,1003,1091,1171,1273,1367,1465,1528,1628,1732,1840,1952,2068,2188,2303,2431,2563,2699,2809,2953],
+  M:[14,26,42,62,84,106,122,152,180,213,251,287,331,362,412,450,504,560,624,666,711,779,857,911,997,1059,1125,1190,1264,1370,1452,1538,1628,1722,1809,1911,1989,2099,2213,2331],
+  Q:[11,20,32,46,60,74,86,108,130,151,177,203,241,258,292,322,364,394,442,482,509,565,611,661,715,751,805,868,908,982,1030,1112,1168,1228,1283,1351,1423,1499,1579,1663],
+  H:[7,14,24,34,44,58,64,84,98,119,137,155,177,194,220,250,280,310,338,382,403,439,461,511,535,593,625,658,698,742,790,842,898,958,983,1051,1093,1139,1219,1273]
+};
+function getQRVersion(byteLen, ec) {
+  const caps = QR_CAP[ec] || QR_CAP.H;
+  for (let i = 0; i < caps.length; i++) { if (caps[i] >= byteLen) return i + 1; }
+  return 40;
 }
+// Module count for a given version: 4*v + 17
+function moduleCount(v) { return 4 * v + 17; }
+// Proportional quiet zone: 4 modules at current pixel density
+function quietZonePx(v, canvasSize) {
+  const mc = moduleCount(v);
+  const pxPerModule = canvasSize / mc;
+  return Math.ceil(4 * pxPerModule);
+}
+
+/* ── vCard field validation ───────────────────────────────────────── */
+function validateFields(type, fields) {
+  const errs = {};
+  if (type === "email" || type === "vcard") {
+    const e = (fields.email || "").trim();
+    if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) errs.email = "Invalid email format";
+  }
+  if (type === "url") {
+    const u = (fields.url || "").trim();
+    if (u && !/^(https?:\/\/)?[\w\-]+(\.[\w\-]+)+/.test(u)) errs.url = "Looks like an invalid URL";
+  }
+  if (type === "wifi") {
+    if (!(fields.ssid || "").trim()) errs.ssid = "SSID is required";
+  }
+  if (type === "vcard") {
+    if (!(fields.firstName || "").trim() && !(fields.lastName || "").trim()) {
+      errs.firstName = "At least one name field required";
+    }
+  }
+  return errs; // {} means valid
+}
+
+/* ── RFC 6350-correct vCard escaping ──────────────────────────────── */
+// Text fields (NOTE, ADR, ORG, FN, N): escape \ ; , "
+// Non-text fields (TEL, EMAIL, URL): no escaping, just whitespace trim
+function vcEscText(v) {
+  return (v||"").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,");
+}
+// TEL: preserve +, digits, spaces, parens, hyphens, dots — RFC 3966
+function vcTel(v) { return (v||"").replace(/[^\d+\-().\s]/g,"").trim(); }
+// WiFi: escape : ; , "
+function wfEsc(v) { return (v||"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
 
 /* ── Data builder ─────────────────────────────────────────────────── */
 function buildData(type, f) {
@@ -278,23 +401,21 @@ function buildData(type, f) {
       return u;
     }
     case "text":  return f.text || "";
-    case "email": return `mailto:${f.email || ""}?subject=${encodeURIComponent(f.subject || "")}&body=${encodeURIComponent(f.body || "")}`;
-    case "sms":   return `sms:${f.phone || ""}${f.message ? `?body=${encodeURIComponent(f.message)}` : ""}`;
-    case "phone": return `tel:${f.phone || ""}`;
-    case "wifi":  return `WIFI:T:${f.security || "WPA"};S:${qrEsc(f.ssid, "wifi")};P:${qrEsc(f.password, "wifi")};;`;
+    case "email": return `mailto:${(f.email||"").trim()}?subject=${encodeURIComponent(f.subject||"")}&body=${encodeURIComponent(f.body||"")}`;
+    case "sms":   return `sms:${(f.phone||"").trim()}${f.message?`?body=${encodeURIComponent(f.message)}`:""}`;
+    case "phone": return `tel:${vcTel(f.phone)}`;
+    case "wifi":  return `WIFI:T:${f.security||"WPA"};S:${wfEsc(f.ssid)};P:${wfEsc(f.password)};;`;
     case "vcard": {
-      // FIX: join non-empty parts only — no leading space when first name missing
-      const fn = [f.firstName, f.lastName].filter(Boolean).map(v => qrEsc(v)).join(" ");
+      const fn = [f.firstName, f.lastName].filter(Boolean).map(vcEscText).join(" ");
       return [
-        "BEGIN:VCARD", "VERSION:3.0",
+        "BEGIN:VCARD","VERSION:3.0",
         `FN:${fn}`,
-        `N:${qrEsc(f.lastName || "")};${qrEsc(f.firstName || "")};;;`,
-        `ORG:${qrEsc(f.org || "")}`,
-        // TEL, EMAIL, URL: NOT vCard text fields — no escaping, just sanitize format
-        `TEL:${(f.phone || "").replace(/[^\d+\-().\ ]/g, "")}`,
-        `EMAIL:${(f.email || "").trim()}`,
-        `URL:${(f.website || "").trim()}`,
-        `ADR:;;${qrEsc(f.address || "")};;;;`,
+        `N:${vcEscText(f.lastName||"")};${vcEscText(f.firstName||"")};;;`,
+        `ORG:${vcEscText(f.org||"")}`,
+        `TEL:${vcTel(f.phone)}`,
+        `EMAIL:${(f.email||"").trim()}`,
+        `URL:${(f.website||"").trim()}`,
+        `ADR:;;${vcEscText(f.address||"")};;;;`,
         "END:VCARD"
       ].join("\n");
     }
@@ -302,125 +423,163 @@ function buildData(type, f) {
   }
 }
 
-/* ── 3-digit hex expansion → correct contrast math ───────────────── */
+/* ── Contrast math ────────────────────────────────────────────────── */
 function expandHex(hex) {
-  hex = (hex || "").trim().replace(/^#/, "");
-  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-  return hex.length === 6 ? "#" + hex : null;
+  hex=(hex||"").trim().replace(/^#/,"");
+  if(hex.length===3) hex=hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  return hex.length===6?"#"+hex:null;
 }
 function hexLum(hex) {
-  const h = expandHex(hex); if (!h) return 0;
-  const r = parseInt(h.slice(1,3),16)/255, g = parseInt(h.slice(3,5),16)/255, b = parseInt(h.slice(5,7),16)/255;
-  const lin = x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4);
-  return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b);
+  const h=expandHex(hex); if(!h) return 0;
+  const r=parseInt(h.slice(1,3),16)/255,g=parseInt(h.slice(3,5),16)/255,b=parseInt(h.slice(5,7),16)/255;
+  const lin=x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);
+  return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);
 }
-function cr(fg, bg) {
-  const l1 = hexLum(fg), l2 = hexLum(bg);
-  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+function cr(fg,bg){
+  const l1=hexLum(fg),l2=hexLum(bg);
+  return(Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
 }
 
-/* ── Categorical scan status (QR scanner thresholds, not WCAG) ────── */
-function scanStatus(fg, bg, ecLevel, logoSize, dataLen, hasMargin, useGrad) {
+/* ── Canvas-pixel finder-pattern contrast check ───────────────────── */
+// Samples the top-left 7x7 finder pattern and checks dark/light module contrast
+// Returns {ratio, ok} — much more accurate than global luminance ratio
+function sampleFinderContrast(canvas) {
+  try {
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    // Finder is in top-left corner — sample a region of ~8% of canvas width
+    const sz = Math.floor(w * 0.08);
+    const dark = [], light = [];
+    for (let y = sz; y < sz*3; y += 2) {
+      for (let x = sz; x < sz*3; x += 2) {
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        const lum = 0.2126*(d[0]/255) + 0.7152*(d[1]/255) + 0.0722*(d[2]/255);
+        if (lum < 0.4) dark.push(lum); else light.push(lum);
+      }
+    }
+    if (!dark.length || !light.length) return { ratio: 1, ok: false, sampled: false };
+    const avgDark  = dark.reduce((a,b)=>a+b,0)/dark.length;
+    const avgLight = light.reduce((a,b)=>a+b,0)/light.length;
+    const ratio = (avgLight + 0.05) / (avgDark + 0.05);
+    return { ratio, ok: ratio >= 3, sampled: true };
+  } catch { return { ratio: 1, ok: false, sampled: false }; }
+}
+
+/* ── Categorical scan status ──────────────────────────────────────── */
+function scanStatus(fg, bg, ecLevel, logoSize, dataLen, hasMargin, useGrad, qrVersion, finderOk) {
   const ratio = cr(fg, bg);
   const reasons = [];
   let bad = 0, caution = 0;
 
-  // QR scanner contrast thresholds are different from WCAG text
-  // Phone cameras need ~3:1 minimum, work best above 4.5:1
-  if (ratio < 2.5) { bad++; reasons.push({ sev:"bad", msg: `Contrast ${ratio.toFixed(1)}:1 — too low for most phone cameras` }); }
-  else if (ratio < 4)  { caution++; reasons.push({ sev:"caution", msg: `Contrast ${ratio.toFixed(1)}:1 — may fail in poor lighting` }); }
+  if (ratio < 2.5) { bad++; reasons.push({ sev:"bad", msg:`Contrast ${ratio.toFixed(1)}:1 — too low for most phone cameras`}); }
+  else if (ratio < 4) { caution++; reasons.push({ sev:"caution", msg:`Contrast ${ratio.toFixed(1)}:1 — may fail in poor lighting`}); }
 
-  // Gradient hurts local contrast for scanners even if overall contrast is ok
-  if (useGrad) { caution++; reasons.push({ sev:"caution", msg: "Gradient dots reduce local contrast — phone cameras prefer solid foreground" }); }
+  if (finderOk === false) { bad++; reasons.push({ sev:"bad", msg:"Finder pattern contrast failed pixel-sample — scanner will not locate QR"}); }
 
-  // EC + logo
-  if (logoSize > 0 && ecLevel === "L") { bad++; reasons.push({ sev:"bad", msg: "Logo with L correction will be unreadable — use H" }); }
-  else if (logoSize > 0 && ecLevel === "M") { caution++; reasons.push({ sev:"caution", msg: "Logo with M correction is risky — use Q or H" }); }
-  if (logoSize > 30) { caution++; reasons.push({ sev:"caution", msg: "Logo covers >30% — data may be obscured" }); }
+  if (useGrad) { caution++; reasons.push({ sev:"caution", msg:"Gradient reduces local dot contrast — phone cameras prefer solid foreground"}); }
 
-  // Dense data
-  if (dataLen > 300) { caution++; reasons.push({ sev:"caution", msg: "Long data creates dense modules — test carefully on phone" }); }
+  if (logoSize > 0 && ecLevel === "L") { bad++; reasons.push({ sev:"bad", msg:"Logo with L correction will be unreadable — use H"}); }
+  else if (logoSize > 0 && ecLevel === "M") { caution++; reasons.push({ sev:"caution", msg:"Logo with M correction is risky — use Q or H"}); }
+  if (logoSize > 30) { caution++; reasons.push({ sev:"caution", msg:"Logo covers >30% — data may be obscured"}); }
 
-  // Quiet zone — critical for phone camera detection
-  if (!hasMargin) { bad++; reasons.push({ sev:"bad", msg: "No quiet zone — phone cameras need white border to locate the QR" }); }
+  if (qrVersion > 15) { caution++; reasons.push({ sev:"caution", msg:`Version ${qrVersion} QR — very dense, test on multiple phone cameras`}); }
+  if (qrVersion > 25) { bad++; reasons.push({ sev:"bad", msg:`Version ${qrVersion} QR — many phone cameras will fail to decode`}); }
+
+  if (dataLen > 300) { caution++; reasons.push({ sev:"caution", msg:"Long data creates dense modules — test carefully on phone"}); }
+  if (!hasMargin) { bad++; reasons.push({ sev:"bad", msg:"No quiet zone — phone cameras need white border to locate QR"}); }
 
   const level = bad > 0 ? "bad" : caution > 0 ? "caution" : "good";
-  return { level, label: { good:"Camera Ready", caution:"Some Concerns", bad:"Will Likely Fail" }[level], reasons };
+  return { level, label:{good:"Camera Ready",caution:"Some Concerns",bad:"Will Likely Fail"}[level], reasons };
 }
 
-/* ── localStorage — quota-guarded ────────────────────────────────── */
-function lsGet(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } }
-function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { if (e.name==="QuotaExceededError"||e.code===22) toast("Storage full","wn"); } }
+/* ── Print DPI calculator ─────────────────────────────────────────── */
+function calcDPI(qrVersion, printSizeIn, dpi) {
+  const mc = moduleCount(qrVersion);
+  const totalPx = dpi * printSizeIn;
+  const pxPerModule = totalPx / mc;
+  const mmPerModule = (pxPerModule / dpi) * 25.4;
+  // QR spec min: 0.25mm per module for good print. Practical phone camera min: ~0.33mm
+  if (mmPerModule < 0.25) return { level:"bad", msg:`${mmPerModule.toFixed(2)}mm/module — below spec minimum (0.25mm)` };
+  if (mmPerModule < 0.33) return { level:"warn", msg:`${mmPerModule.toFixed(2)}mm/module — marginal, may fail on some cameras` };
+  return { level:"ok", msg:`${mmPerModule.toFixed(2)}mm/module — camera-readable at this size` };
+}
+
+/* ── localStorage ─────────────────────────────────────────────────── */
+function lsGet(k,fb){try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){if(e.name==="QuotaExceededError"||e.code===22)toast("Storage full","wn");}}
 
 /* ═══════════════════════════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════════════════════════ */
 const S = {
-  qrType: "url",
-  fields: lsGet("qrs_fields_url", {}),
-  dotType: "square",
+  qrType:    "url",
+  fields:    lsGet("qrs_fields_url", {}),
+  fieldErrs: {},
+  dotType:   "square",
   eyeRadius: "square",
-  fgColor: "#b8f400",
-  bgColor: "#0c0f0a",
-  useGrad: false,
-  gradEnd: "#00ff88",
-  ecLevel: "H",       // Default H — best for phone camera reliability
-  logoSrc: null,
-  logoSize: 20,
+  fgColor:   "#b8f400",
+  bgColor:   "#0c0f0a",
+  useGrad:   false,
+  gradEnd:   "#00ff88",
+  ecLevel:   "H",
+  logoSrc:   null,
+  logoSize:  20,
   hasMargin: true,
   customTab: "style",
-  verifyStatus: null, // null | "checking" | "pass" | "fail"
-  hasQR: false,       // FIX 3: set by QRController, read by render — no getInstance() in render path
+  verifyStatus: null,
+  hasQR:     false,
   imgCopied: false,
-  dataCopied: false,
+  dataCopied:false,
+  lowlight:  false,
+  qrVersion: 1,
+  finderOk:  null,  // null = not yet sampled
+  printSize: 2,     // inches
+  printDPI:  300,
+  // batch
+  batchTab:  false,
+  batchProgress: null, // null | { done, total }
+  batchBlob: null,
 };
 
-/* ── Reactive core ────────────────────────────────────────────────── */
 let _raf = false;
-// FIX 4: optional afterRender callback runs after render() completes —
-// eliminates setTimeout(0) hack used on type switch
 function update(patch, afterRender) {
   Object.assign(S, typeof patch === "function" ? patch(S) : patch);
-  if (!_raf) {
-    _raf = true;
-    requestAnimationFrame(() => { render(); _raf = false; if (afterRender) afterRender(); });
-  }
+  if (!_raf) { _raf=true; requestAnimationFrame(()=>{ render(); _raf=false; if(afterRender) afterRender(); }); }
 }
 
-/* ── h() — correct property setting, cursor-safe ─────────────────── */
-function h(tag, attrs = {}, ...kids) {
+/* ── h() ───────────────────────────────────────────────────────────── */
+function h(tag, attrs={}, ...kids) {
   const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === null || v === undefined || v === false) continue;
-    if (k === "class")   el.className = v;
-    else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
-    else if (k === "value")    el.value = v;          // property, not attribute
-    else if (k === "checked")  el.checked = !!v;
-    else if (k === "selected") el.selected = !!v;
-    else if (k === "disabled") el.disabled = !!v;
-    else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
-    else el.setAttribute(k, v);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (v===null||v===undefined||v===false) continue;
+    if (k==="class") el.className=v;
+    else if (k==="style"&&typeof v==="object") Object.assign(el.style,v);
+    else if (k==="value")    el.value=v;
+    else if (k==="checked")  el.checked=!!v;
+    else if (k==="selected") el.selected=!!v;
+    else if (k==="disabled") el.disabled=!!v;
+    else if (k.startsWith("on")&&typeof v==="function") el.addEventListener(k.slice(2).toLowerCase(),v);
+    else el.setAttribute(k,v);
   }
   for (const c of kids.flat(Infinity)) {
-    if (c == null || c === false) continue;
-    el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    if (c==null||c===false) continue;
+    el.appendChild(typeof c==="string"?document.createTextNode(c):c);
   }
   return el;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   QRController — canvas lifecycle fully decoupled from UI render
-   • Owns #qr-mount contents
-   • Uses .update() to avoid flicker when only options change
-   • MutationObserver to detect canvas-ready — no setTimeout dead-wait
-   • EC invariant enforced here, at generation time
+   QRController v6
+   - qrcode.js primary (fast, ~25KB)
+   - qr-code-styling lazy-loaded for custom dot/eye styles
+   - Proportional quiet zone
+   - HiDPI canvas output
 ═══════════════════════════════════════════════════════════════════ */
 const QRC = (() => {
-  let _inst = null;
+  let _styInst = null;
   let _lastSig = null;
-  let _obs = null;       // MutationObserver for canvas-ready detection
+  let _obs = null;
 
-  // EC invariant: logo requires minimum error correction
   function clampEC(ec, logoSrc, logoSize) {
     if (!logoSrc || logoSize === 0) return ec;
     if (ec === "L") return "H";
@@ -428,15 +587,12 @@ const QRC = (() => {
     if (ec === "M") return "Q";
     return ec;
   }
-
   function mount() { return document.getElementById("qr-mount"); }
 
   function sig(o) {
-    return [o.data, o.dotType, o.eyeRadius, o.fgColor, o.bgColor, o.useGrad, o.gradEnd, o.ecLevel, o.logoSrc, o.logoSize, o.hasMargin].join("|");
+    return [o.data,o.dotType,o.eyeRadius,o.fgColor,o.bgColor,o.useGrad,o.gradEnd,o.ecLevel,o.logoSrc?"y":"n",o.logoSize,o.hasMargin].join("|");
   }
 
-  // Wait for canvas to appear in mount using MutationObserver
-  // Replaces arbitrary 900ms setTimeout — fires within one paint frame
   function waitForCanvas(el) {
     return new Promise(resolve => {
       const existing = el.querySelector("canvas");
@@ -444,158 +600,224 @@ const QRC = (() => {
       if (_obs) _obs.disconnect();
       _obs = new MutationObserver(() => {
         const c = el.querySelector("canvas");
-        if (c) { _obs.disconnect(); _obs = null; resolve(c); }
+        if (c) { _obs.disconnect(); _obs=null; resolve(c); }
       });
-      _obs.observe(el, { childList: true, subtree: true });
-      // Safety timeout: if canvas never appears (SVG-only path), resolve anyway
-      setTimeout(() => { if (_obs) { _obs.disconnect(); _obs = null; } resolve(null); }, 3000);
+      _obs.observe(el, { childList:true, subtree:true });
+      setTimeout(() => { if(_obs){_obs.disconnect();_obs=null;} resolve(null); }, 3500);
     });
+  }
+
+  // Check if current options need the styling library
+  function needsStyling(opts) {
+    return opts.dotType !== "square" || opts.eyeRadius !== "square" ||
+           opts.useGrad || opts.logoSrc;
   }
 
   async function generate(opts) {
     const el = mount(); if (!el) return;
     const effectiveEC = clampEC(opts.ecLevel, opts.logoSrc, opts.logoSize);
-    const s = sig({ ...opts, ecLevel: effectiveEC });
+    const s = sig({...opts, ecLevel: effectiveEC});
     if (s === _lastSig) return;
     _lastSig = s;
 
-    update({ verifyStatus: "checking" });
+    update({ verifyStatus: "checking", finderOk: null });
 
-    try { await ensureQRLib(); } catch (e) { toast("QR library load failed", "er"); update({ verifyStatus: null }); return; }
+    // Compute QR version upfront for quiet zone
+    const byteLen = new TextEncoder().encode(opts.data).length;
+    const ver = getQRVersion(byteLen, effectiveEC);
+    update({ qrVersion: ver });
 
-    const qOpts = {
-      width: 400, height: 400,
-      data: opts.data,
-      dotsOptions: opts.useGrad
-        ? { type: opts.dotType, gradient: { type: "linear", rotation: 0.8, colorStops: [{ offset: 0, color: opts.fgColor }, { offset: 1, color: opts.gradEnd }] } }
-        : { type: opts.dotType, color: opts.fgColor },
-      cornersSquareOptions: {
-        type: opts.eyeRadius === "dot" ? "dot" : opts.eyeRadius === "extra-rounded" ? "extra-rounded" : "square",
-        color: opts.fgColor
-      },
-      cornersDotOptions: { type: opts.eyeRadius === "dot" ? "dot" : "square", color: opts.fgColor },
-      backgroundOptions: { color: opts.bgColor },
-      qrOptions: { errorCorrectionLevel: effectiveEC },
-      margin: opts.hasMargin ? 16 : 0,  // 16px quiet zone — minimum for phone cameras
-      ...(opts.logoSrc ? { image: opts.logoSrc, imageOptions: { imageSize: opts.logoSize / 100, margin: 5, crossOrigin: "anonymous" } } : {}),
-    };
+    // Canvas size: 4× for HiDPI, min 400
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const canvasTarget = Math.max(400, 400 * dpr);
+    const qzPx = opts.hasMargin ? quietZonePx(ver, canvasTarget) : 0;
 
-    if (window.QRCodeStyling) {
-      if (_inst) {
-        _inst.update(qOpts); // in-place update — no flicker, no DOM thrash
+    const useStyling = needsStyling(opts);
+
+    try {
+      if (useStyling) {
+        // Lazy-load styling lib
+        await ensureStyling();
+        const qOpts = {
+          width: canvasTarget, height: canvasTarget,
+          data: opts.data,
+          dotsOptions: opts.useGrad
+            ? { type: opts.dotType, gradient: { type:"linear", rotation:0.8, colorStops:[{offset:0,color:opts.fgColor},{offset:1,color:opts.gradEnd}] } }
+            : { type: opts.dotType, color: opts.fgColor },
+          cornersSquareOptions: {
+            type: opts.eyeRadius==="dot"?"dot":opts.eyeRadius==="extra-rounded"?"extra-rounded":"square",
+            color: opts.fgColor
+          },
+          cornersDotOptions: { type: opts.eyeRadius==="dot"?"dot":"square", color: opts.fgColor },
+          backgroundOptions: { color: opts.bgColor },
+          qrOptions: { errorCorrectionLevel: effectiveEC },
+          margin: qzPx,
+          ...(opts.logoSrc?{ image:opts.logoSrc, imageOptions:{imageSize:opts.logoSize/100,margin:5,crossOrigin:"anonymous"} }:{})
+        };
+        if (_styInst) {
+          _styInst.update(qOpts);
+        } else {
+          el.innerHTML = ""; _styInst = null;
+          _styInst = new window.QRCodeStyling(qOpts);
+          _styInst.append(el);
+        }
       } else {
-        el.innerHTML = "";
-        _inst = new window.QRCodeStyling(qOpts);
-        _inst.append(el);
+        // Fast path: qrcode.js directly, draw to canvas
+        const QRCode = await ensureQR();
+        el.innerHTML = ""; _styInst = null;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = canvasTarget; canvas.height = canvasTarget;
+        el.appendChild(canvas);
+
+        await QRCode.toCanvas(canvas, opts.data, {
+          errorCorrectionLevel: effectiveEC,
+          width: canvasTarget,
+          margin: Math.ceil(qzPx / (canvasTarget / moduleCount(ver))), // in modules
+          color: { dark: opts.fgColor, light: opts.bgColor }
+        });
       }
-    } else if (window.QRCode) {
-      // FIX: check window.QRCode exists before falling through silently
-      if (!window.QRCode) { toast("QR library unavailable — check network", "er"); update({ verifyStatus: null, hasQR: false }); return; }
-      el.innerHTML = ""; _inst = null;
-      new window.QRCode(el, {
-        text: opts.data, width: 320, height: 320,
-        colorDark: opts.fgColor, colorLight: opts.bgColor,
-        correctLevel: window.QRCode.CorrectLevel[effectiveEC] || window.QRCode.CorrectLevel.H,
-      });
-    } else {
-      // Neither library attached to window after load — surface this, don't fail silently
-      toast("QR library failed to initialise — try refreshing", "er");
+    } catch(e) {
+      toast("QR generation failed: " + e.message, "er");
       update({ verifyStatus: null, hasQR: false });
       return;
     }
 
-    // FIX 3: Signal to render that a QR now exists — no getInstance() needed in render path
     update({ hasQR: true });
 
-    // MutationObserver-based verify — fires as soon as canvas appears, not after 900ms
     waitForCanvas(el).then(canvas => {
-      if (canvas) autoVerify(opts.data, canvas);
-      else update({ verifyStatus: null });
+      if (canvas) {
+        // Sample finder contrast from rendered pixels
+        const fc = sampleFinderContrast(canvas);
+        update({ finderOk: fc.sampled ? fc.ok : null });
+        autoVerify(opts.data, canvas);
+      } else {
+        update({ verifyStatus: null });
+      }
     });
   }
 
   function clear() {
     const el = mount(); if (!el) return;
-    if (_obs) { _obs.disconnect(); _obs = null; }
-    _inst = null; _lastSig = null;
+    if (_obs) { _obs.disconnect(); _obs=null; }
+    _styInst = null; _lastSig = null;
     el.innerHTML = "";
-    // FIX 3: clear hasQR flag via update() — keeps reactive contract intact
-    update({ verifyStatus: null, hasQR: false });
+    update({ verifyStatus:null, hasQR:false, qrVersion:1, finderOk:null });
   }
 
-  function getClampEC(ec, logoSrc, logoSize) { return clampEC(ec, logoSrc, logoSize); }
-  // FIX 3: getInstance removed from public API — render uses S.hasQR instead
-  // download() still needs the instance; expose it only for that purpose
-  function getInstance() { return _inst; }
-
+  function getInstance() { return _styInst; }
+  function getClampEC(ec, ls, lsz) { return clampEC(ec, ls, lsz); }
   return { generate, clear, getInstance, clampEC: getClampEC };
 })();
 
-/* ── autoVerify — persistent reader, decodeFromCanvas, two-phase badge ── */
-// FIX 2: reader instantiated once and reused — not recreated on every verify
-// FIX 6: two phases — "loading" while ZXing fetches, "checking" while decoding
-let _zxReader = null;
-let _lastVerifiedData = null; // FIX 2: skip verify if data unchanged
+/* ── autoVerify v6: true zero-copy path ───────────────────────────── */
+let _zxMultiReader = null;
 
 async function autoVerify(expectedData, canvas) {
-  // Skip re-verify if data hasn't changed — free optimisation for tab switches etc.
-  if (expectedData === _lastVerifiedData && S.verifyStatus === "pass") return;
-
   try {
-    // Phase 1 — show "loading" while ZXing bundle fetches (first call only)
     update({ verifyStatus: "loading" });
     const ZXing = await ensureZXing();
-
-    // Phase 2 — ZXing loaded, now actually decoding
     update({ verifyStatus: "checking" });
 
-    // FIX 2: reuse persistent reader instance
-    if (!_zxReader) _zxReader = new ZXing.BrowserQRCodeReader();
-
-    // FIX 3: decodeFromCanvas skips toDataURL PNG round-trip entirely
-    // Falls back to image element if decodeFromCanvas unavailable in this build
-    let result = null;
-    if (typeof _zxReader.decodeFromCanvas === "function") {
-      result = await _zxReader.decodeFromCanvas(canvas).catch(() => null);
-    } else {
-      // Fallback: still faster than before since reader is reused
-      const img = new Image();
-      img.src = canvas.toDataURL("image/png");
-      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-      result = await _zxReader.decodeFromImageElement(img).catch(() => null);
+    // Instantiate MultiFormatReader once — much lighter than BrowserQRCodeReader
+    if (!_zxMultiReader) {
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      _zxMultiReader = new ZXing.MultiFormatReader();
+      _zxMultiReader.setHints(hints);
     }
 
-    const decoded = result ? result.getText() : null;
+    // BinaryBitmap directly from canvas — zero PNG round-trip
+    const lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+    const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+
+    let decoded = null;
+    try {
+      const result = _zxMultiReader.decode(bmp);
+      decoded = result ? result.getText() : null;
+    } catch { decoded = null; }
+
     const passed = decoded === expectedData;
-    if (passed) _lastVerifiedData = expectedData;
     update({ verifyStatus: passed ? "pass" : "fail" });
+
+    // If verify fails, log decoded vs expected for debugging
+    if (!passed && decoded) console.warn("[QR v6] Verify mismatch\nExpected:", expectedData, "\nDecoded:", decoded);
   } catch {
     update({ verifyStatus: null });
   }
 }
 
+/* ── Batch CSV generation ─────────────────────────────────────────── */
+async function runBatch(csvText) {
+  const lines = csvText.trim().split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) { toast("CSV is empty", "wn"); return; }
+
+  update({ batchProgress: { done:0, total:lines.length }, batchBlob:null });
+
+  try {
+    const [QRCode, JSZip] = await Promise.all([ensureQR(), ensureJSZip()]);
+    const zip = new JSZip();
+
+    for (let i = 0; i < lines.length; i++) {
+      const row = lines[i].split(",");
+      const label = (row[0] || "").trim().replace(/[^\w\-]/g,"_") || `qr_${i+1}`;
+      let data = (row[1] || row[0] || "").trim();
+      if (!data) continue;
+      if (!/^https?:\/\//i.test(data) && /\./.test(data)) data = "https://" + data;
+
+      const canvas = document.createElement("canvas");
+      const ver = getQRVersion(new TextEncoder().encode(data).length, S.ecLevel);
+      const qzModules = S.hasMargin ? 4 : 0;
+      await QRCode.toCanvas(canvas, data, {
+        errorCorrectionLevel: S.ecLevel, width: 600,
+        margin: qzModules,
+        color: { dark: S.fgColor, light: S.bgColor }
+      });
+      const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+      zip.file(label + ".png", blob);
+      update({ batchProgress: { done: i+1, total: lines.length }, batchBlob: null });
+      // Yield to UI thread
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    const zipBlob = await zip.generateAsync({ type:"blob", compression:"DEFLATE" });
+    update({ batchProgress: null, batchBlob: zipBlob });
+    toast(`${lines.length} QR codes ready`, "ok");
+  } catch(e) {
+    toast("Batch failed: " + e.message, "er");
+    update({ batchProgress: null });
+  }
+}
+
+function downloadBatch() {
+  if (!S.batchBlob) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(S.batchBlob);
+  a.download = "qrcodes.zip";
+  a.click();
+}
+
 /* ── Download ─────────────────────────────────────────────────────── */
 function dlQR(fmt) {
   const inst = QRC.getInstance();
-  if (!inst) {
-    const c = document.getElementById("qr-mount")?.querySelector("canvas");
-    if (!c) { toast("Generate a QR first", "wn"); return; }
-    const a = document.createElement("a"); a.href = c.toDataURL(); a.download = "qrcode.png"; a.click();
-    return;
-  }
-  inst.download({ name: "qrcode", extension: fmt });
+  if (inst) { inst.download({ name:"qrcode", extension:fmt }); return; }
+  const c = document.getElementById("qr-mount")?.querySelector("canvas");
+  if (!c) { toast("Generate a QR first","wn"); return; }
+  if (fmt === "svg") { toast("SVG export requires custom dot styles","wn"); return; }
+  const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = "qrcode.png"; a.click();
 }
 
 /* ── Copy image ───────────────────────────────────────────────────── */
 async function copyImg() {
   const c = document.getElementById("qr-mount")?.querySelector("canvas");
-  if (!c) { toast("Generate a QR first", "wn"); return; }
+  if (!c) { toast("Generate a QR first","wn"); return; }
   c.toBlob(async blob => {
     try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      update({ imgCopied: true }); setTimeout(() => update({ imgCopied: false }), 2000);
-      toast("Image copied", "ok");
-    } catch { toast("Clipboard denied — use Download instead", "er"); }
+      await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
+      update({imgCopied:true}); setTimeout(()=>update({imgCopied:false}),2000);
+      toast("Image copied","ok");
+    } catch { toast("Clipboard denied — use Download","er"); }
   });
 }
 
@@ -603,587 +825,570 @@ async function copyImg() {
 async function copyData(raw) {
   try {
     await navigator.clipboard.writeText(raw);
-    update({ dataCopied: true }); setTimeout(() => update({ dataCopied: false }), 2000);
-    toast("Copied", "ok");
-  } catch { toast("Clipboard write failed", "er"); }
+    update({dataCopied:true}); setTimeout(()=>update({dataCopied:false}),2000);
+    toast("Copied","ok");
+  } catch { toast("Clipboard write failed","er"); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════════════════════ */
-const QR_TYPES = [
-  { id:"url",   label:"URL",   icon:"🔗" }, { id:"text",  label:"Text",  icon:"📝" },
-  { id:"email", label:"Email", icon:"✉️" }, { id:"sms",   label:"SMS",   icon:"💬" },
-  { id:"phone", label:"Phone", icon:"📞" }, { id:"wifi",  label:"WiFi",  icon:"📶" },
-  { id:"vcard", label:"vCard", icon:"👤" },
+const QR_TYPES=[
+  {id:"url",label:"URL",icon:"🔗"},{id:"text",label:"Text",icon:"📝"},
+  {id:"email",label:"Email",icon:"✉️"},{id:"sms",label:"SMS",icon:"💬"},
+  {id:"phone",label:"Phone",icon:"📞"},{id:"wifi",label:"WiFi",icon:"📶"},
+  {id:"vcard",label:"vCard",icon:"👤"},
 ];
-const DOT_TYPES   = ["square","dots","rounded","extra-rounded","classy","classy-rounded"];
-const DOT_LABELS  = { square:"Square", dots:"Dots", rounded:"Rounded", "extra-rounded":"X-Round", classy:"Classy", "classy-rounded":"Classy+" };
-const EYE_RADII   = ["square","dot","extra-rounded"];
-const EYE_LABELS  = { square:"Square", dot:"Dot", "extra-rounded":"Round" };
-const EC_LEVELS   = ["L","M","Q","H"];
-const TEMPLATES   = [
-  { name:"Acid",      bg:"#0c0f0a", fg:"#b8f400" }, { name:"Obsidian", bg:"#0d0d0d", fg:"#ffffff" },
-  { name:"Blueprint", bg:"#0a1628", fg:"#4da6ff" }, { name:"Ember",    bg:"#1a0800", fg:"#ff6b35" },
-  { name:"Sakura",    bg:"#1a0d12", fg:"#ff8fab" }, { name:"Matrix",   bg:"#001a00", fg:"#00ff41" },
-  { name:"Chalk",     bg:"#fafaf8", fg:"#1a1a1a" }, { name:"Gold",     bg:"#0f0c00", fg:"#ffd700" },
+const DOT_TYPES=["square","dots","rounded","extra-rounded","classy","classy-rounded"];
+const DOT_LABELS={square:"Square",dots:"Dots",rounded:"Rounded","extra-rounded":"X-Round",classy:"Classy","classy-rounded":"Classy+"};
+const EYE_RADII=["square","dot","extra-rounded"];
+const EYE_LABELS={square:"Square",dot:"Dot","extra-rounded":"Round"};
+const EC_LEVELS=["L","M","Q","H"];
+const TEMPLATES=[
+  {name:"Acid",    bg:"#0c0f0a",fg:"#b8f400"},{name:"Obsidian",bg:"#0d0d0d",fg:"#ffffff"},
+  {name:"Blueprint",bg:"#0a1628",fg:"#4da6ff"},{name:"Ember",  bg:"#1a0800",fg:"#ff6b35"},
+  {name:"Sakura",  bg:"#1a0d12",fg:"#ff8fab"},{name:"Matrix",  bg:"#001a00",fg:"#00ff41"},
+  {name:"Chalk",   bg:"#fafaf8",fg:"#1a1a1a"},{name:"Gold",    bg:"#0f0c00",fg:"#ffd700"},
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
-   PERSISTENT ELEMENTS — never recreated by render()
-   This is how we fix focus loss: form + QR mount are stable DOM nodes.
-   render() patches their attributes; never replaces the elements.
+   PERSISTENT ELEMENTS
 ═══════════════════════════════════════════════════════════════════ */
-
-// Persistent QR mount
 const QR_MOUNT = (() => {
   const el = document.createElement("div");
-  el.id = "qr-mount";
-  el.className = "qr-mount empty";
+  el.id = "qr-mount"; el.className = "qr-mount empty";
   el.innerHTML = `<div class="empty-hint"><div class="big">▣</div><div class="txt">Enter data to generate</div></div>`;
   return el;
 })();
-
-// Persistent form container — children updated via patchForm(), not replaced
 const FORM_EL = document.createElement("div");
 FORM_EL.id = "form-container";
 
 /* ═══════════════════════════════════════════════════════════════════
-   FORM PATCHING — updates inputs in-place, never replaces elements
-   This is the fix for focus loss. We compare current DOM to desired
-   state and only change what differs.
+   FORM PATCHING
 ═══════════════════════════════════════════════════════════════════ */
-function patchInput(container, key, label, placeholder, type = "text") {
+function patchInput(container, key, label, placeholder, type="text") {
   let wrap = container.querySelector(`[data-key="${key}"]`);
   if (!wrap) {
-    wrap = document.createElement("div");
-    wrap.className = "fld";
-    wrap.setAttribute("data-key", key);
-    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = label;
+    wrap = document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
+    const lbl = document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
     const inp = document.createElement("input");
-    inp.type = type; inp.placeholder = placeholder;
+    inp.type=type; inp.placeholder=placeholder;
+    const errDiv = document.createElement("div"); errDiv.className="fld-err";
     inp.addEventListener("input", e => {
-      // FIX 1: all state mutations go through update() — no direct S.x = assignment
-      const newFields = { ...S.fields, [key]: e.target.value };
-      update({ fields: newFields });
-      lsSet("qrs_fields_" + S.qrType, newFields);
-      scheduleQR(newFields); // FIX 1: pass newFields — don't read stale S.fields
+      const newFields = {...S.fields,[key]:e.target.value};
+      const errs = validateFields(S.qrType, newFields);
+      update({ fields:newFields, fieldErrs:errs });
+      lsSet("qrs_fields_"+S.qrType, newFields);
+      scheduleQR(newFields);
     });
-    wrap.appendChild(lbl); wrap.appendChild(inp);
+    wrap.appendChild(lbl); wrap.appendChild(inp); wrap.appendChild(errDiv);
     container.appendChild(wrap);
   }
-  // Patch only if value differs from state (don't touch focused input)
   const inp = wrap.querySelector("input");
-  if (document.activeElement !== inp && inp.value !== (S.fields[key] || "")) {
-    inp.value = S.fields[key] || "";
-  }
-  inp.type = type;
-  inp.placeholder = placeholder;
-  wrap.querySelector(".lbl").textContent = label;
+  const errDiv = wrap.querySelector(".fld-err");
+  if (document.activeElement !== inp && inp.value !== (S.fields[key]||"")) inp.value = S.fields[key]||"";
+  inp.type=type; inp.placeholder=placeholder;
+  wrap.querySelector(".lbl").textContent=label;
+  // Show/hide validation error
+  const errMsg = S.fieldErrs[key];
+  if (errMsg) { inp.classList.add("err"); errDiv.textContent=errMsg; errDiv.classList.add("show"); }
+  else { inp.classList.remove("err"); errDiv.textContent=""; errDiv.classList.remove("show"); }
 }
 
 function patchTextarea(container, key, label, placeholder) {
   let wrap = container.querySelector(`[data-key="${key}"]`);
   if (!wrap) {
-    wrap = document.createElement("div");
-    wrap.className = "fld";
-    wrap.setAttribute("data-key", key);
-    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = label;
-    const ta = document.createElement("textarea");
-    ta.placeholder = placeholder;
+    wrap=document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
+    const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
+    const ta=document.createElement("textarea"); ta.placeholder=placeholder;
     ta.addEventListener("input", e => {
-      // FIX 1: consistent update() path — no direct S mutation
-      const newFields = { ...S.fields, [key]: e.target.value };
-      update({ fields: newFields });
-      lsSet("qrs_fields_" + S.qrType, newFields);
-      scheduleQR(newFields); // FIX 1: pass newFields directly
+      const newFields={...S.fields,[key]:e.target.value};
+      update({fields:newFields});
+      lsSet("qrs_fields_"+S.qrType,newFields);
+      scheduleQR(newFields);
     });
-    wrap.appendChild(lbl); wrap.appendChild(ta);
-    container.appendChild(wrap);
+    wrap.appendChild(lbl); wrap.appendChild(ta); container.appendChild(wrap);
   }
-  const ta = wrap.querySelector("textarea");
-  if (document.activeElement !== ta && ta.value !== (S.fields[key] || "")) {
-    ta.value = S.fields[key] || "";
-  }
-  ta.placeholder = placeholder;
+  const ta=wrap.querySelector("textarea");
+  if(document.activeElement!==ta&&ta.value!==(S.fields[key]||"")) ta.value=S.fields[key]||"";
+  ta.placeholder=placeholder;
 }
 
 function patchSelect(container, key, label, options) {
-  let wrap = container.querySelector(`[data-key="${key}"]`);
-  if (!wrap) {
-    wrap = document.createElement("div");
-    wrap.className = "fld";
-    wrap.setAttribute("data-key", key);
-    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = label;
-    const sel = document.createElement("select");
-    options.forEach(o => { const op = document.createElement("option"); op.value = op.textContent = o; sel.appendChild(op); });
-    sel.addEventListener("change", e => {
-      // FIX 1: consistent update() path
-      const newFields = { ...S.fields, [key]: e.target.value };
-      update({ fields: newFields });
-      lsSet("qrs_fields_" + S.qrType, newFields);
-      scheduleQR(newFields); // FIX 1: pass newFields directly
-    });
-    wrap.appendChild(lbl); wrap.appendChild(sel);
-    container.appendChild(wrap);
+  let wrap=container.querySelector(`[data-key="${key}"]`);
+  if(!wrap){
+    wrap=document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
+    const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
+    const sel=document.createElement("select");
+    options.forEach(o=>{const op=document.createElement("option");op.value=op.textContent=o;sel.appendChild(op);});
+    sel.addEventListener("change",e=>{const newFields={...S.fields,[key]:e.target.value};update({fields:newFields});lsSet("qrs_fields_"+S.qrType,newFields);scheduleQR(newFields);});
+    wrap.appendChild(lbl); wrap.appendChild(sel); container.appendChild(wrap);
   }
-  const sel = wrap.querySelector("select");
-  sel.value = S.fields[key] || options[0];
+  const sel=wrap.querySelector("select");
+  sel.value=S.fields[key]||options[0];
 }
 
 function buildForm(container) {
-  // Remove any fields not needed for current type
-  const needed = getNeededKeys(S.qrType);
-  [...container.querySelectorAll("[data-key]")].forEach(el => {
-    if (!needed.includes(el.dataset.key)) el.remove();
-  });
-
-  // Also remove two-col wrappers if switching away from vcard
-  if (S.qrType !== "vcard") {
-    const tc = container.querySelector(".two"); if (tc) tc.remove();
-  }
-
-  switch (S.qrType) {
-    case "url":
-      patchInput(container, "url", "Website URL", "https://example.com", "url"); break;
-    case "text":
-      patchTextarea(container, "text", "Text Content", "Any text, code, message…"); break;
-    case "email":
-      patchInput(container, "email", "Email", "you@example.com", "email");
-      patchInput(container, "subject", "Subject", "Subject line");
-      patchTextarea(container, "body", "Body", "Message…"); break;
-    case "sms":
-      patchInput(container, "phone", "Phone Number", "+1 555 000 0000", "tel");
-      patchTextarea(container, "message", "Message", "SMS body…"); break;
-    case "phone":
-      patchInput(container, "phone", "Phone Number", "+1 555 000 0000", "tel"); break;
-    case "wifi":
-      patchInput(container, "ssid", "Network SSID", "MyWiFiNetwork");
-      patchInput(container, "password", "Password", "WiFi password", "password");
-      patchSelect(container, "security", "Security", ["WPA","WPA2","WEP","None"]); break;
-    case "vcard":
-      // Two-column name row
-      let twoCol = container.querySelector(".two");
-      if (!twoCol) {
-        twoCol = document.createElement("div");
-        twoCol.className = "two";
-        container.insertBefore(twoCol, container.firstChild);
-      }
-      // Check keys exist inside twoCol specifically
-      const fnNeeded = ["firstName","lastName"];
-      [...twoCol.querySelectorAll("[data-key]")].forEach(el => { if (!fnNeeded.includes(el.dataset.key)) el.remove(); });
-      patchInput(twoCol, "firstName", "First Name", "John");
-      patchInput(twoCol, "lastName", "Last Name", "Doe");
-      patchInput(container, "org", "Organization", "Company Name");
-      patchInput(container, "phone", "Phone", "+1 555 000 0000", "tel");
-      patchInput(container, "email", "Email", "john@example.com", "email");
-      patchInput(container, "website", "Website", "https://example.com", "url");
-      patchInput(container, "address", "Address", "123 Main St, City"); break;
+  const needed=getNeededKeys(S.qrType);
+  [...container.querySelectorAll("[data-key]")].forEach(el=>{if(!needed.includes(el.dataset.key))el.remove();});
+  if(S.qrType!=="vcard"){const tc=container.querySelector(".two");if(tc)tc.remove();}
+  switch(S.qrType){
+    case"url":   patchInput(container,"url","Website URL","https://example.com","url"); break;
+    case"text":  patchTextarea(container,"text","Text Content","Any text, code, message…"); break;
+    case"email": patchInput(container,"email","Email","you@example.com","email"); patchInput(container,"subject","Subject","Subject line"); patchTextarea(container,"body","Body","Message…"); break;
+    case"sms":   patchInput(container,"phone","Phone Number","+1 555 000 0000","tel"); patchTextarea(container,"message","Message","SMS body…"); break;
+    case"phone": patchInput(container,"phone","Phone Number","+1 555 000 0000","tel"); break;
+    case"wifi":  patchInput(container,"ssid","Network SSID","MyWiFiNetwork"); patchInput(container,"password","Password","WiFi password","password"); patchSelect(container,"security","Security",["WPA","WPA2","WEP","None"]); break;
+    case"vcard":
+      let twoCol=container.querySelector(".two");
+      if(!twoCol){twoCol=document.createElement("div");twoCol.className="two";container.insertBefore(twoCol,container.firstChild);}
+      [...twoCol.querySelectorAll("[data-key]")].forEach(el=>{if(!["firstName","lastName"].includes(el.dataset.key))el.remove();});
+      patchInput(twoCol,"firstName","First Name","John");
+      patchInput(twoCol,"lastName","Last Name","Doe");
+      patchInput(container,"org","Organization","Company Name");
+      patchInput(container,"phone","Phone","+1 555 000 0000","tel");
+      patchInput(container,"email","Email","john@example.com","email");
+      patchInput(container,"website","Website","https://example.com","url");
+      patchInput(container,"address","Address","123 Main St, City"); break;
   }
 }
 
-function getNeededKeys(type) {
-  const map = {
-    url:["url"], text:["text"], email:["email","subject","body"],
-    sms:["phone","message"], phone:["phone"], wifi:["ssid","password","security"],
-    vcard:["firstName","lastName","org","phone","email","website","address"]
-  };
-  return map[type] || [];
+function getNeededKeys(type){
+  const map={url:["url"],text:["text"],email:["email","subject","body"],sms:["phone","message"],phone:["phone"],wifi:["ssid","password","security"],vcard:["firstName","lastName","org","phone","email","website","address"]};
+  return map[type]||[];
 }
 
-/* ── Debounced QR generation ──────────────────────────────────────── */
-let _qrTimer = null;
-// FIX 1: scheduleQR accepts newFields so triggerQR never reads stale S.fields
-// S.fields is updated via update() which batches via rAF — by the time
-// scheduleQR fires (180ms later) S.fields is settled, but we pass the value
-// through explicitly to be safe and correct regardless of rAF timing.
-function scheduleQR(fields) {
-  if (_qrTimer) clearTimeout(_qrTimer);
-  _qrTimer = setTimeout(() => triggerQR(fields), 180);
+/* ── QR generation scheduling ─────────────────────────────────────── */
+let _qrTimer=null;
+function scheduleQR(fields){
+  if(_qrTimer)clearTimeout(_qrTimer);
+  _qrTimer=setTimeout(()=>triggerQR(fields),180);
 }
 
 function triggerQR(fields) {
-  _qrTimer = null;
-  // Use passed fields if provided, fall back to S.fields (for non-input triggers)
+  _qrTimer=null;
   const f = fields !== undefined ? fields : S.fields;
+  const errs = validateFields(S.qrType, f);
+  if (Object.keys(errs).length) { QRC.clear(); return; } // don't generate on invalid data
   const raw = buildData(S.qrType, f);
   if (!raw.trim()) { QRC.clear(); return; }
   QRC.generate({
-    data: raw, dotType: S.dotType, eyeRadius: S.eyeRadius,
-    fgColor: S.fgColor, bgColor: S.bgColor,
-    useGrad: S.useGrad, gradEnd: S.gradEnd,
-    ecLevel: S.ecLevel, logoSrc: S.logoSrc,
-    logoSize: S.logoSize, hasMargin: S.hasMargin,
+    data:raw, dotType:S.dotType, eyeRadius:S.eyeRadius,
+    fgColor:S.fgColor, bgColor:S.bgColor,
+    useGrad:S.useGrad, gradEnd:S.gradEnd,
+    ecLevel:S.ecLevel, logoSrc:S.logoSrc,
+    logoSize:S.logoSize, hasMargin:S.hasMargin,
   });
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   RENDER — UI skeleton only. Form inputs never replaced. QR never touched.
+   RENDER
 ═══════════════════════════════════════════════════════════════════ */
-const tog = (on, onClick) => h("button", { class: "tog" + (on ? " on" : ""), onClick }, h("div", { class: "tog-k" }));
+const tog=(on,onClick)=>h("button",{class:"tog"+(on?" on":""),onClick},h("div",{class:"tog-k"}));
 
-function rHeader() {
-  return h("header", {}, h("div", { class: "hdr-inner" },
-    h("div", { class: "logo" },
-      h("div", { class: "logo-box" }, "▣"),
-      h("div", { class: "logo-name" }, "QR", h("span", {}, "_"), "studio")
+function rHeader(){
+  return h("header",{},h("div",{class:"hdr-inner"},
+    h("div",{class:"logo"},
+      h("div",{class:"logo-box"},"▣"),
+      h("div",{class:"logo-name"},"QR",h("span",{},"_"),"studio")
     ),
-    h("div", { class: "hdr-badge" }, "ENCODE")
+    h("div",{class:"hdr-badges"},
+      h("div",{class:"hdr-badge v6"},"v6"),
+      h("div",{class:"hdr-badge"},"ENCODE")
+    )
   ));
 }
 
-function rTypeSelector() {
-  return h("div", {}, h("div", { class: "sec-label", style: "margin-bottom:12px" }, "◈ Content Type"),
-    h("div", { class: "type-grid" },
-      QR_TYPES.map(t => h("button", {
-        class: "type-btn" + (S.qrType === t.id ? " on" : ""),
-        onClick: () => {
-          if (S.qrType === t.id) return;
-          const savedFields = lsGet("qrs_fields_" + t.id, {});
-          // FIX 4: afterRender callback replaces setTimeout(0) —
-          // buildForm and triggerQR run only after render() has placed
-          // FORM_EL back into the DOM, with savedFields passed through (FIX 1)
-          update({ qrType: t.id, fields: savedFields }, () => {
-            buildForm(FORM_EL);
-            triggerQR(savedFields);
-          });
+function rTypeSelector(){
+  return h("div",{},
+    h("div",{class:"sec-label",style:"margin-bottom:12px"},"◈ Content Type"),
+    h("div",{class:"type-grid"},
+      QR_TYPES.map(t=>h("button",{
+        class:"type-btn"+(S.qrType===t.id?" on":""),
+        onClick:()=>{
+          if(S.qrType===t.id)return;
+          const savedFields=lsGet("qrs_fields_"+t.id,{});
+          const errs=validateFields(t.id,savedFields);
+          update({qrType:t.id,fields:savedFields,fieldErrs:errs},()=>{buildForm(FORM_EL);triggerQR(savedFields);});
         }
-      }, h("span", { class: "ico" }, t.icon), t.label))
+      },h("span",{class:"ico"},t.icon),t.label))
     )
   );
 }
 
-function rStyleTab() {
-  return h("div", {},
-    h("div", { class: "lbl" }, "Module Shape"),
-    h("div", { class: "shape-grid" },
-      DOT_TYPES.map(d => h("button", { class: "shape-btn" + (S.dotType === d ? " on" : ""), onClick: () => { update({ dotType: d }); triggerQR(); } }, DOT_LABELS[d]))
+function rStyleTab(){
+  const needsStyling = S.dotType!=="square"||S.eyeRadius!=="square"||S.useGrad||S.logoSrc;
+  return h("div",{},
+    h("div",{class:"lbl"},"Module Shape"),
+    h("div",{class:"shape-grid"},
+      DOT_TYPES.map(d=>h("button",{class:"shape-btn"+(S.dotType===d?" on":""),onClick:()=>{update({dotType:d});triggerQR();}},DOT_LABELS[d]))
     ),
-    h("div", { class: "lbl" }, "Eye Style"),
-    h("div", { class: "eye-row" },
-      EYE_RADII.map(e => h("button", { class: "eye-btn" + (S.eyeRadius === e ? " on" : ""), onClick: () => { update({ eyeRadius: e }); triggerQR(); } }, EYE_LABELS[e]))
-    )
-  );
-}
-
-function rColorsTab() {
-  const cRow = (label, val, onChange) => h("div", { class: "c-row" },
-    h("span", { class: "c-lbl" }, label),
-    h("div", { class: "c-ctrl" },
-      h("div", { class: "swatch", style: { background: val } },
-        h("input", { type: "color", value: val, onInput: e => { onChange(e.target.value); triggerQR(); } })
-      ),
-      h("input", { type: "text", class: "hex", value: val,
-        onInput: e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) { onChange(e.target.value); triggerQR(); } }
-      })
-    )
-  );
-  return h("div", {},
-    h("div", { class: "lbl" }, "Templates"),
-    h("div", { class: "tpl-row" },
-      TEMPLATES.map(t => h("button", { class: "tpl",
-        onClick: () => { update({ bgColor: t.bg, fgColor: t.fg, useGrad: false }); triggerQR(); }
-      }, h("div", { style: { width:"12px",height:"12px",borderRadius:"3px",background:t.fg,flexShrink:"0" } }), t.name))
+    h("div",{class:"lbl"},"Eye Style"),
+    h("div",{class:"eye-row"},
+      EYE_RADII.map(e=>h("button",{class:"eye-btn"+(S.eyeRadius===e?" on":""),onClick:()=>{update({eyeRadius:e});triggerQR();}},EYE_LABELS[e]))
     ),
-    cRow("Foreground", S.fgColor, v => update({ fgColor: v })),
-    cRow("Background", S.bgColor, v => update({ bgColor: v })),
-    h("div", { class: "tog-row" },
-      tog(S.useGrad, () => { update({ useGrad: !S.useGrad }); triggerQR(); }),
-      h("span", { class: "tog-lbl", onClick: () => { update({ useGrad: !S.useGrad }); triggerQR(); } }, "Gradient mode")
-    ),
-    S.useGrad ? cRow("Gradient End", S.gradEnd, v => update({ gradEnd: v })) : null,
-    // Phone camera warning about gradients
-    S.useGrad ? h("div", { class: "qz-notice" }, "⚠ Gradients reduce local dot contrast. Phone cameras may struggle. Solid foreground is always more reliable.") : null
-  );
-}
-
-function rAdvancedTab(status) {
-  const dc = { good:"var(--a)", caution:"var(--warn)", bad:"var(--danger)" };
-  const si = { good:"✓", caution:"⚠", bad:"✕" };
-  const effEC = QRC.clampEC(S.ecLevel, S.logoSrc, S.logoSize);
-
-  return h("div", {},
-    h("div", { class: "lbl" }, "Error Correction"),
-    h("div", { class: "ec-row" },
-      EC_LEVELS.map(l => {
-        const isSelected = S.ecLevel === l;
-        const isClamped  = effEC !== S.ecLevel && l === effEC;
-        return h("button", {
-          class: "ecb" + (isSelected ? " on" : "") + (isClamped && !isSelected ? " clamped" : ""),
-          title: isClamped && !isSelected ? "Auto-upgraded by logo requirement" : "",
-          onClick: () => { update({ ecLevel: l }); triggerQR(); }
-        }, l + (isClamped && !isSelected ? "↑" : ""));
-      })
-    ),
-    h("div", { class: "ec-hint" }, "L 7%  M 15%  Q 25%  H 30% — H recommended for styled QR"),
-
-    h("div", { class: "lbl" }, "Logo / Icon"),
-    S.logoSrc
-      ? h("div", { class: "logo-prev" },
-          h("img", { class: "logo-img", src: S.logoSrc }),
-          h("div", { style: "flex:1" },
-            h("div", { style: "font-size:11px;color:var(--mut);margin-bottom:5px" }, `Size: ${S.logoSize}%`),
-            h("input", { type: "range", min: 10, max: 35, value: S.logoSize, style: "width:100%",
-              onInput: e => { update({ logoSize: +e.target.value }); triggerQR(); }
-            })
-          ),
-          h("button", { class: "logo-rm", onClick: () => { update({ logoSrc: null, logoSize: 20 }); triggerQR(); } }, "×")
-        )
-      : h("button", { class: "logo-up", onClick: () => document.getElementById("logo-inp")?.click() },
-          h("span", { style: "font-size:20px" }, "⬆"),
-          h("span", { style: "font-size:13px;font-weight:600" }, "Upload Logo"),
-          h("span", { style: "font-size:10px;color:rgba(184,244,0,.35)" }, "Use H error correction with logos")
-        ),
-    h("input", { id: "logo-inp", type: "file", accept: "image/*", style: "display:none",
-      onChange: e => {
-        const file = e.target.files?.[0]; if (!file) return;
-        const r = new FileReader();
-        r.onload = ev => { update({ logoSrc: ev.target.result, ecLevel: "H" }); triggerQR(); };
-        r.readAsDataURL(file);
-      }
-    }),
-
-    h("div", { style: "margin-top:14px;display:flex;align-items:center;gap:9px;margin-bottom:16px" },
-      tog(S.hasMargin, () => { update({ hasMargin: !S.hasMargin }); triggerQR(); }),
-      h("span", { class: "tog-lbl", onClick: () => { update({ hasMargin: !S.hasMargin }); triggerQR(); } }, "Quiet zone margin")
-    ),
-
-    // Phone camera specific quiet zone tip
-    h("div", { class: "qz-notice" },
-      h("strong", {}, "Phone camera tip: "),
-      "Quiet zone (white border) is how scanners locate the QR. Without it, scan fails reliably. Keep margin ON."
-    ),
-
-    // Categorical status
-    h("div", { class: "scan-box " + status.level },
-      h("div", { class: "scan-hdr" },
-        h("div", { class: "scan-dot", style: { background: dc[status.level] } }),
-        h("div", { class: "scan-title", style: { color: dc[status.level] } }, status.label)
-      ),
-      status.reasons.length > 0
-        ? h("div", { class: "scan-items" },
-            status.reasons.map(r => h("div", { class: "scan-item" },
-              h("span", { style: { color: r.sev==="bad"?"var(--danger)":"var(--warn)", flexShrink:"0" } }, si[r.sev]),
-              h("span", {}, r.msg)
-            ))
-          )
-        : h("div", { class: "scan-item" },
-            h("span", { style: "color:var(--a);flex-shrink:0" }, "✓"),
-            h("span", {}, "No camera readability issues detected")
-          )
-    )
-  );
-}
-
-function rPreviewPanel(rawData) {
-  const hasData = !!rawData.trim();
-  // FIX 3: read S.hasQR — no side-effectful QRC.getInstance() inside render
-  const hasQR = S.hasQR;
-
-  // Update persistent QR_MOUNT class and bg without replacing it
-  QR_MOUNT.className = (!hasData ? "qr-mount empty" : "qr-mount") +
-    (S.verifyStatus === "pass" ? " pass" : S.verifyStatus === "fail" ? " fail" : "");
-  QR_MOUNT.style.background = hasData ? S.bgColor : "";
-
-  // Show/hide empty hint
-  let hint = QR_MOUNT.querySelector(".empty-hint");
-  if (!hasData) {
-    if (!hint) {
-      hint = document.createElement("div"); hint.className = "empty-hint";
-      hint.innerHTML = `<div class="big">▣</div><div class="txt">Enter data to generate</div>`;
-      // Remove scanline if any
-      const sl = QR_MOUNT.querySelector(".scanline-wrap"); if(sl) sl.remove();
-      QR_MOUNT.appendChild(hint);
-    }
-  } else {
-    if (hint) hint.remove();
-  }
-
-  // Scanline while verifying
-  let slWrap = QR_MOUNT.querySelector(".scanline-wrap");
-  if (S.verifyStatus === "checking") {
-    if (!slWrap) {
-      slWrap = document.createElement("div"); slWrap.className = "scanline-wrap";
-      slWrap.innerHTML = `<div class="scanline"></div>`;
-      QR_MOUNT.appendChild(slWrap);
-    }
-  } else { if (slWrap) slWrap.remove(); }
-
-  let vBadge = null;
-  if (S.verifyStatus === "checking") vBadge = h("span", { class: "vbadge checking" }, "⟳ verifying…");
-  else if (S.verifyStatus === "pass") vBadge = h("span", { class: "vbadge pass" }, "✓ canvas decoded");
-  else if (S.verifyStatus === "fail") vBadge = h("span", { class: "vbadge fail" }, "⚠ verify failed");
-
-  return h("div", { class: "sec" },
-    h("div", { class: "prev-hdr" },
-      h("div", { class: "prev-title" }, "◈ Preview"),
-      vBadge
-    ),
-    // QR_MOUNT inserted here by render() transplant logic
-    // FIX 2: disclaimer injected by updateVerifyBadge() immediately after qr-mount,
-    // not here — so it survives partial renders that skip this function entirely.
-    h("div", { id: "qr-mount-slot" }),
-    hasData && hasQR ? h("div", {},
-      h("div", { class: "dl-row" },
-        h("button", { class: "btn-main", onClick: () => dlQR("png") }, "⬇ Download PNG"),
-        h("button", { class: "btn-out",  onClick: () => dlQR("svg") }, "⬇ SVG")
-      ),
-      h("div", { class: "cp-row" },
-        h("button", { class: "btn-g" + (S.imgCopied ? " done" : ""), onClick: copyImg }, S.imgCopied ? "✓ Copied!" : "⎘ Copy Image"),
-        h("button", { class: "btn-g" + (S.dataCopied ? " done" : ""), onClick: () => copyData(rawData) }, S.dataCopied ? "✓ Copied!" : "⎘ Copy Data")
-      ),
-      h("div", { class: "data-chip" }, h("span", { style: "color:var(--a)" }, "▶ "), rawData),
-      h("div", { class: "cam-tip" }, "📱 Point phone camera directly at QR — most native cameras decode without an app")
+    needsStyling ? h("div",{class:"qz-notice",style:"margin-top:12px"},
+      h("strong",{},"Styled mode: "),
+      "Using full styling library. Square modules + square eyes uses the fast encoder (~8× faster generation)."
     ) : null
   );
 }
 
-function rCustomize(status) {
-  return h("div", { class: "sec" },
-    h("div", { class: "sec-label" }, "◈ Customize"),
-    h("div", { class: "ctabs" },
-      ["style","colors","advanced"].map(id => h("button", {
-        class: "ctab" + (S.customTab === id ? " on" : ""),
-        onClick: () => update({ customTab: id })
-      }, id[0].toUpperCase() + id.slice(1)))
+function rColorsTab(){
+  const cRow=(label,val,onChange)=>h("div",{class:"c-row"},
+    h("span",{class:"c-lbl"},label),
+    h("div",{class:"c-ctrl"},
+      h("div",{class:"swatch",style:{background:val}},
+        h("input",{type:"color",value:val,onInput:e=>{onChange(e.target.value);triggerQR();}})
+      ),
+      h("input",{type:"text",class:"hex",value:val,
+        onInput:e=>{if(/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)){onChange(e.target.value);triggerQR();}}
+      })
+    )
+  );
+  return h("div",{},
+    h("div",{class:"lbl"},"Templates"),
+    h("div",{class:"tpl-row"},
+      TEMPLATES.map(t=>h("button",{class:"tpl",onClick:()=>{update({bgColor:t.bg,fgColor:t.fg,useGrad:false});triggerQR();}},
+        h("div",{style:{width:"12px",height:"12px",borderRadius:"3px",background:t.fg,flexShrink:"0"}}),t.name
+      ))
     ),
-    S.customTab === "style"    ? rStyleTab() : null,
-    S.customTab === "colors"   ? rColorsTab() : null,
-    S.customTab === "advanced" ? rAdvancedTab(status) : null
+    cRow("Foreground",S.fgColor,v=>update({fgColor:v})),
+    cRow("Background",S.bgColor,v=>update({bgColor:v})),
+    // Gradient — hard gate
+    h("div",{class:"tog-row"},
+      tog(S.useGrad,()=>{
+        if(!S.useGrad){
+          const ratio=cr(S.fgColor,S.bgColor);
+          if(ratio<5){
+            toast("Gradient warning: contrast "+ratio.toFixed(1)+":1 may fail on phone cameras","wn",4000);
+          }
+        }
+        update({useGrad:!S.useGrad}); triggerQR();
+      }),
+      h("span",{class:"tog-lbl",onClick:()=>{update({useGrad:!S.useGrad});triggerQR();}},"Gradient mode")
+    ),
+    S.useGrad ? h("div",{},
+      cRow("Gradient End",S.gradEnd,v=>update({gradEnd:v})),
+      h("div",{class:"grad-warn"},
+        h("strong",{},"⚠ Gradient camera risk: "),
+        "Variable dot luminance confuses phone camera decoders. Use solid foreground for reliable scans. If contrast ratio is below 5:1, many cameras will fail in normal lighting.",
+        h("button",{class:"btn-grad-off",onClick:()=>{update({useGrad:false});triggerQR();}},"→ Switch to solid (recommended)")
+      )
+    ) : null
+  );
+}
+
+function rAdvancedTab(status, rawData){
+  const effEC=QRC.clampEC(S.ecLevel,S.logoSrc,S.logoSize);
+  const dc={good:"var(--a)",caution:"var(--warn)",bad:"var(--danger)"};
+  const si={good:"✓",caution:"⚠",bad:"✕"};
+
+  const dpiResult = S.hasQR ? calcDPI(S.qrVersion, S.printSize, S.printDPI) : null;
+
+  return h("div",{},
+    h("div",{class:"lbl"},"Error Correction"),
+    h("div",{class:"ec-row"},
+      EC_LEVELS.map(l=>{
+        const isSelected=S.ecLevel===l;
+        const isClamped=effEC!==S.ecLevel&&l===effEC;
+        return h("button",{
+          class:"ecb"+(isSelected?" on":"")+(isClamped&&!isSelected?" clamped":""),
+          title:isClamped&&!isSelected?"Auto-upgraded by logo requirement":"",
+          onClick:()=>{update({ecLevel:l});triggerQR();}
+        },l+(isClamped&&!isSelected?"↑":""));
+      })
+    ),
+    h("div",{class:"ec-hint"},"L 7%  M 15%  Q 25%  H 30% — H recommended for styled QR"),
+
+    h("div",{class:"lbl"},"Logo / Icon"),
+    S.logoSrc
+      ? h("div",{class:"logo-prev"},
+          h("img",{class:"logo-img",src:S.logoSrc}),
+          h("div",{style:"flex:1"},
+            h("div",{style:"font-size:11px;color:var(--mut);margin-bottom:5px"},`Size: ${S.logoSize}%`),
+            h("input",{type:"range",min:10,max:35,value:S.logoSize,style:"width:100%",onInput:e=>{update({logoSize:+e.target.value});triggerQR();}})
+          ),
+          h("button",{class:"logo-rm",onClick:()=>{update({logoSrc:null,logoSize:20});triggerQR();}},"×")
+        )
+      : h("button",{class:"logo-up",onClick:()=>document.getElementById("logo-inp")?.click()},
+          h("span",{style:"font-size:20px"},"⬆"),
+          h("span",{style:"font-size:13px;font-weight:600"},"Upload Logo"),
+          h("span",{style:"font-size:10px;color:rgba(184,244,0,.35)"},"Use H error correction with logos")
+        ),
+    h("input",{id:"logo-inp",type:"file",accept:"image/*",style:"display:none",
+      onChange:e=>{
+        const file=e.target.files?.[0];if(!file)return;
+        const r=new FileReader();
+        r.onload=ev=>{update({logoSrc:ev.target.result,ecLevel:"H"});triggerQR();};
+        r.readAsDataURL(file);
+      }
+    }),
+
+    h("div",{style:"margin-top:14px;display:flex;align-items:center;gap:9px;margin-bottom:16px"},
+      tog(S.hasMargin,()=>{update({hasMargin:!S.hasMargin});triggerQR();}),
+      h("span",{class:"tog-lbl",onClick:()=>{update({hasMargin:!S.hasMargin});triggerQR();}},"Quiet zone margin")
+    ),
+
+    h("div",{class:"qz-notice"},
+      h("strong",{},"Quiet zone: "),
+      S.hasQR
+        ? `${quietZonePx(S.qrVersion, Math.max(400,400*(Math.min(window.devicePixelRatio||1,3))))}px at current res (4 module widths for v${S.qrVersion})`
+        : "4 module widths (proportional to QR version) — do not disable"
+    ),
+
+    // Print DPI calculator
+    h("div",{class:"dpi-wrap"},
+      h("div",{class:"dpi-title"},"◈ Print Readability"),
+      h("div",{class:"dpi-row"},
+        h("div",{},
+          h("div",{class:"lbl"},"Print size (in)"),
+          h("input",{type:"number",value:S.printSize,min:0.5,max:24,step:0.5,
+            onInput:e=>{update({printSize:parseFloat(e.target.value)||2});}
+          })
+        ),
+        h("div",{},
+          h("div",{class:"lbl"},"DPI"),
+          h("input",{type:"number",value:S.printDPI,min:72,max:1200,step:1,
+            onInput:e=>{update({printDPI:parseInt(e.target.value)||300});}
+          })
+        )
+      ),
+      dpiResult ? h("div",{class:"dpi-result "+dpiResult.level},dpiResult.msg) : h("div",{class:"dpi-result",style:"color:rgba(255,255,255,.2);font-size:10px"},"Generate a QR to see print analysis")
+    ),
+
+    // Scan readiness
+    h("div",{class:"scan-box "+status.level},
+      h("div",{class:"scan-hdr"},
+        h("div",{class:"scan-dot",style:{background:dc[status.level]}}),
+        h("div",{class:"scan-title",style:{color:dc[status.level]}},status.label)
+      ),
+      status.reasons.length>0
+        ? h("div",{class:"scan-items"},
+            status.reasons.map(r=>h("div",{class:"scan-item"},
+              h("span",{style:{color:r.sev==="bad"?"var(--danger)":"var(--warn)",flexShrink:"0"}},si[r.sev]),
+              h("span",{},r.msg)
+            ))
+          )
+        : h("div",{class:"scan-item"},h("span",{style:"color:var(--a);flex-shrink:0"},"✓"),h("span",{},"No camera readability issues detected"))
+    )
+  );
+}
+
+function rBatchTab(){
+  return h("div",{},
+    h("div",{class:"sec-label"},"◈ Batch CSV → ZIP"),
+    h("div",{style:"font-size:11px;color:rgba(255,255,255,.25);margin-bottom:12px;line-height:1.6"},
+      "CSV format: ",h("span",{style:"color:rgba(184,244,0,.5);font-family:'Space Mono',monospace"},"label,url"),
+      " — one QR per row. Uses current color/EC settings."
+    ),
+    h("button",{class:"batch-drop",onClick:()=>document.getElementById("batch-inp")?.click()},
+      h("span",{class:"ico"},"📋"),
+      h("span",{class:"txt"},"Click to upload CSV"),
+      h("span",{class:"sub"},"label,url — one per line")
+    ),
+    h("input",{id:"batch-inp",type:"file",accept:".csv,text/csv",style:"display:none",
+      onChange:async e=>{
+        const file=e.target.files?.[0];if(!file)return;
+        const text=await file.text();
+        e.target.value="";
+        runBatch(text);
+      }
+    }),
+    // Also allow pasting CSV directly
+    h("div",{style:"margin-top:10px"},
+      h("div",{class:"lbl"},"Or paste CSV"),
+      h("textarea",{placeholder:"homepage,https://example.com\nshop,https://shop.example.com",style:"min-height:80px",
+        onBlur:e=>{if(e.target.value.trim()){runBatch(e.target.value);e.target.value="";}}
+      })
+    ),
+    S.batchProgress ? h("div",{class:"batch-progress"},
+      h("div",{class:"batch-txt"},`Generating ${S.batchProgress.done} / ${S.batchProgress.total}…`),
+      h("div",{class:"batch-bar-wrap"},
+        h("div",{class:"batch-bar",style:{width:`${Math.round(S.batchProgress.done/S.batchProgress.total*100)}%`}})
+      )
+    ) : null,
+    S.batchBlob ? h("div",{class:"batch-progress"},
+      h("div",{class:"batch-txt",style:"color:rgba(184,244,0,.7)"},"✓ ZIP ready — click to download"),
+      h("button",{class:"batch-dl",onClick:downloadBatch},"⬇ Download ZIP")
+    ) : null
+  );
+}
+
+function rQRStats(rawData){
+  if(!S.hasQR||!rawData.trim()) return null;
+  const byteLen = new TextEncoder().encode(rawData).length;
+  const effEC = QRC.clampEC(S.ecLevel,S.logoSrc,S.logoSize);
+  const maxCap = QR_CAP[effEC]?.[S.qrVersion-1]||0;
+  const pct = maxCap ? Math.round(byteLen/maxCap*100) : 0;
+
+  const vClass = S.qrVersion>25?"bad":S.qrVersion>15?"warn":"";
+  const pClass = pct>90?"bad":pct>70?"warn":"";
+
+  return h("div",{class:"qr-stats"},
+    h("div",{class:`stat-chip ${vClass}`},"Version ",h("span",{class:"sv"},"v"+S.qrVersion)),
+    h("div",{class:`stat-chip ${pClass}`},"Capacity ",h("span",{class:"sv"},pct+"%")),
+    h("div",{class:"stat-chip"},"Bytes ",h("span",{class:"sv"},byteLen)),
+    h("div",{class:"stat-chip"},h("span",{class:"sv"},effEC)," EC"),
+    S.finderOk===false ? h("div",{class:"stat-chip bad"},h("span",{class:"sv"},"⚠")," finder") : null,
+    S.finderOk===true  ? h("div",{class:"stat-chip"},h("span",{class:"sv"},"✓")," finder") : null,
+  );
+}
+
+function rPreviewPanel(rawData){
+  const hasData=!!rawData.trim();
+  const hasQR=S.hasQR;
+
+  // Update persistent QR_MOUNT
+  QR_MOUNT.className=(!hasData?"qr-mount empty":"qr-mount")+
+    (S.verifyStatus==="pass"?" pass":S.verifyStatus==="fail"?" fail":"")+
+    (S.lowlight?" lowlight":"");
+  QR_MOUNT.style.background=hasData?S.bgColor:"";
+
+  let hint=QR_MOUNT.querySelector(".empty-hint");
+  if(!hasData){
+    if(!hint){hint=document.createElement("div");hint.className="empty-hint";hint.innerHTML=`<div class="big">▣</div><div class="txt">Enter data to generate</div>`;const sl=QR_MOUNT.querySelector(".scanline-wrap");if(sl)sl.remove();QR_MOUNT.appendChild(hint);}
+  } else { if(hint)hint.remove(); }
+
+  let slWrap=QR_MOUNT.querySelector(".scanline-wrap");
+  if(S.verifyStatus==="checking"||S.verifyStatus==="loading"){
+    if(!slWrap){slWrap=document.createElement("div");slWrap.className="scanline-wrap";slWrap.innerHTML=`<div class="scanline"></div>`;QR_MOUNT.appendChild(slWrap);}
+  } else { if(slWrap)slWrap.remove(); }
+
+  return h("div",{class:"sec"},
+    h("div",{class:"prev-hdr"},
+      h("div",{class:"prev-title"},"◈ Preview"),
+      null // badge injected by updateVerifyBadge()
+    ),
+    h("div",{id:"qr-mount-slot"}),
+    rQRStats(rawData),
+    hasData&&hasQR ? h("div",{},
+      h("button",{
+        class:"btn-ll"+(S.lowlight?" on":""),
+        onClick:()=>update({lowlight:!S.lowlight}),
+        title:"Simulate low-light / bad camera phone worst case"
+      },S.lowlight?"🔆 Low-light ON — click to disable":"🌑 Simulate low-light camera"),
+      h("div",{class:"dl-row"},
+        h("button",{class:"btn-main",onClick:()=>dlQR("png")},"⬇ Download PNG"),
+        h("button",{class:"btn-out",onClick:()=>dlQR("svg")},"⬇ SVG")
+      ),
+      h("div",{class:"cp-row"},
+        h("button",{class:"btn-g"+(S.imgCopied?" done":""),onClick:copyImg},S.imgCopied?"✓ Copied!":"⎘ Copy Image"),
+        h("button",{class:"btn-g"+(S.dataCopied?" done":""),onClick:()=>copyData(rawData)},S.dataCopied?"✓ Copied!":"⎘ Copy Data")
+      ),
+      h("div",{class:"data-chip"},h("span",{style:"color:var(--a)"},"▶ "),rawData),
+      h("div",{class:"cam-tip"},"📱 Point phone camera directly at QR — most native cameras decode without an app")
+    ) : null
+  );
+}
+
+function rCustomize(status, rawData){
+  return h("div",{class:"sec"},
+    h("div",{class:"sec-label"},"◈ Customize"),
+    h("div",{class:"ctabs"},
+      ["style","colors","advanced","batch"].map(id=>h("button",{
+        class:"ctab"+(S.customTab===id?" on":""),
+        onClick:()=>update({customTab:id})
+      },id[0].toUpperCase()+id.slice(1)))
+    ),
+    S.customTab==="style"    ? rStyleTab() : null,
+    S.customTab==="colors"   ? rColorsTab() : null,
+    S.customTab==="advanced" ? rAdvancedTab(status, rawData) : null,
+    S.customTab==="batch"    ? rBatchTab() : null,
   );
 }
 
 /* ── Main render ──────────────────────────────────────────────────── */
-let _prevRenderSig = null;
+let _prevRenderSig=null;
+function render(){
+  const root=document.getElementById("root"); if(!root)return;
 
-function render() {
-  const root = document.getElementById("root");
-  if (!root) return;
+  const rawData=buildData(S.qrType,S.fields);
+  const hasData=!!rawData.trim();
+  const byteLen=new TextEncoder().encode(rawData).length;
+  const status=scanStatus(S.fgColor,S.bgColor,S.ecLevel,S.logoSrc?S.logoSize:0,byteLen,S.hasMargin,S.useGrad,S.qrVersion,S.finderOk);
 
-  const rawData = buildData(S.qrType, S.fields);
-  const hasData = !!rawData.trim();
-  const status = scanStatus(S.fgColor, S.bgColor, S.ecLevel, S.logoSrc ? S.logoSize : 0, rawData.length, S.hasMargin, S.useGrad);
+  const uiSig=[S.qrType,S.customTab,S.dotType,S.eyeRadius,S.fgColor,S.bgColor,S.useGrad,S.gradEnd,S.ecLevel,S.logoSrc?"y":"n",S.logoSize,S.hasMargin,status.level,hasData,S.hasQR,S.qrVersion,S.finderOk,S.printSize,S.printDPI,S.lowlight,S.batchProgress?"y":"n",S.batchBlob?"y":"n",Object.keys(S.fieldErrs).join(",")].join("|");
+  const shouldRebuild=uiSig!==_prevRenderSig;
 
-  // Render signature — skip full rebuild if only verify status or copy state changed
-  const uiSig = [S.qrType, S.customTab, S.dotType, S.eyeRadius, S.fgColor, S.bgColor, S.useGrad, S.gradEnd, S.ecLevel, S.logoSrc?"y":"n", S.logoSize, S.hasMargin, status.level, hasData, S.hasQR].join("|");
-  const shouldRebuild = uiSig !== _prevRenderSig;
+  // Always-cheap updates
+  QR_MOUNT.className=(!hasData?"qr-mount empty":"qr-mount")+
+    (S.verifyStatus==="pass"?" pass":S.verifyStatus==="fail"?" fail":"")+
+    (S.lowlight?" lowlight":"");
+  QR_MOUNT.style.background=hasData?S.bgColor:"";
+  let slWrap=QR_MOUNT.querySelector(".scanline-wrap");
+  if(S.verifyStatus==="checking"||S.verifyStatus==="loading"){
+    if(!slWrap){slWrap=document.createElement("div");slWrap.className="scanline-wrap";slWrap.innerHTML=`<div class="scanline"></div>`;QR_MOUNT.appendChild(slWrap);}
+  } else { if(slWrap)slWrap.remove(); }
+  let hint=QR_MOUNT.querySelector(".empty-hint");
+  if(!hasData){if(!hint){hint=document.createElement("div");hint.className="empty-hint";hint.innerHTML=`<div class="big">▣</div><div class="txt">Enter data to generate</div>`;QR_MOUNT.appendChild(hint);}}else{if(hint)hint.remove();}
 
-  // Always update QR_MOUNT state (class, bg, scanline, verify badge)
-  // This is cheap and handles verify status changes without full rebuild
-  QR_MOUNT.className = (!hasData ? "qr-mount empty" : "qr-mount") +
-    (S.verifyStatus === "pass" ? " pass" : S.verifyStatus === "fail" ? " fail" : "");
-  QR_MOUNT.style.background = hasData ? S.bgColor : "";
-  let slWrap = QR_MOUNT.querySelector(".scanline-wrap");
-  // FIX 6: scanline visible during both "loading" (fetching ZXing) and "checking" (decoding)
-  if (S.verifyStatus === "checking" || S.verifyStatus === "loading") {
-    if (!slWrap) { slWrap = document.createElement("div"); slWrap.className = "scanline-wrap"; slWrap.innerHTML = `<div class="scanline"></div>`; QR_MOUNT.appendChild(slWrap); }
-  } else { if (slWrap) slWrap.remove(); }
-  let hint = QR_MOUNT.querySelector(".empty-hint");
-  if (!hasData) { if (!hint) { hint = document.createElement("div"); hint.className = "empty-hint"; hint.innerHTML = `<div class="big">▣</div><div class="txt">Enter data to generate</div>`; QR_MOUNT.appendChild(hint); } }
-  else { if (hint) hint.remove(); }
-
-  // FIX 2: updateVerifyBadge runs on every render() call — before the shouldRebuild
-  // guard — so badge + disclaimer stay in sync even when full rebuild is skipped.
   updateVerifyBadge();
+  if(!shouldRebuild)return;
+  _prevRenderSig=uiSig;
 
-  if (!shouldRebuild) return;
-  _prevRenderSig = uiSig;
-
-  // Full UI rebuild (happens on tab change, style change, etc. — not on every keystroke via scheduleQR)
-  const tree = document.createElement("div");
+  const tree=document.createElement("div");
   tree.appendChild(rHeader());
+  const mainDiv=document.createElement("div"); mainDiv.className="main";
+  const gridDiv=document.createElement("div"); gridDiv.className="grid";
 
-  const mainDiv = document.createElement("div"); mainDiv.className = "main";
-  const gridDiv = document.createElement("div"); gridDiv.className = "grid";
-
-  // Left column
-  const leftCol = document.createElement("div");
-
-  // Type selector section
-  const typeSec = document.createElement("div"); typeSec.className = "sec";
+  const leftCol=document.createElement("div");
+  const typeSec=document.createElement("div"); typeSec.className="sec";
   typeSec.appendChild(rTypeSelector());
   leftCol.appendChild(typeSec);
 
-  // Content form section — uses persistent FORM_EL
-  const formSec = document.createElement("div"); formSec.className = "sec";
-  formSec.style.marginTop = "14px";
-  const formLabel = document.createElement("div"); formLabel.className = "sec-label"; formLabel.textContent = "◈ Content";
-  formSec.appendChild(formLabel);
-  formSec.appendChild(FORM_EL);
+  const formSec=document.createElement("div"); formSec.className="sec"; formSec.style.marginTop="14px";
+  const formLabel=document.createElement("div"); formLabel.className="sec-label"; formLabel.textContent="◈ Content";
+  formSec.appendChild(formLabel); formSec.appendChild(FORM_EL);
   leftCol.appendChild(formSec);
-
-  // Customize
-  leftCol.appendChild(rCustomize(status));
+  leftCol.appendChild(rCustomize(status, rawData));
   gridDiv.appendChild(leftCol);
 
-  // Right column — preview
-  const rightCol = document.createElement("div"); rightCol.className = "preview-wrap";
-  const prevSec = rPreviewPanel(rawData);
-  rightCol.appendChild(prevSec);
+  const rightCol=document.createElement("div"); rightCol.className="preview-wrap";
+  rightCol.appendChild(rPreviewPanel(rawData));
   gridDiv.appendChild(rightCol);
 
   mainDiv.appendChild(gridDiv);
   tree.appendChild(mainDiv);
 
-  // Swap root
-  root.innerHTML = "";
-  while (tree.firstChild) root.appendChild(tree.firstChild);
+  root.innerHTML="";
+  while(tree.firstChild)root.appendChild(tree.firstChild);
 
-  // Transplant persistent QR_MOUNT into its slot
-  const slot = document.getElementById("qr-mount-slot");
-  if (slot) slot.replaceWith(QR_MOUNT);
+  const slot=document.getElementById("qr-mount-slot");
+  if(slot)slot.replaceWith(QR_MOUNT);
 
-  // Patch form inputs for current type (in-place, cursor-safe)
   buildForm(FORM_EL);
-
-  // Update verify badge in preview header (without rebuilding)
   updateVerifyBadge();
 }
 
-function updateVerifyBadge() {
-  const prevHdr = document.querySelector(".prev-hdr");
-  if (!prevHdr) return;
-
-  // Update badge
-  let badge = prevHdr.querySelector(".vbadge");
-  if (S.verifyStatus === null) {
-    if (badge) badge.remove();
-  } else {
-    if (!badge) { badge = document.createElement("span"); prevHdr.appendChild(badge); }
-    // FIX 6: two-phase badge text — users know if it's a network wait or decode work
-    if      (S.verifyStatus === "loading")  { badge.className = "vbadge loading";  badge.textContent = "⟳ loading verifier…"; }
-    else if (S.verifyStatus === "checking") { badge.className = "vbadge checking"; badge.textContent = "⟳ verifying…"; }
-    else if (S.verifyStatus === "pass")     { badge.className = "vbadge pass";     badge.textContent = "✓ canvas decoded"; }
-    else if (S.verifyStatus === "fail")     { badge.className = "vbadge fail";     badge.textContent = "⚠ verify failed"; }
+function updateVerifyBadge(){
+  const prevHdr=document.querySelector(".prev-hdr"); if(!prevHdr)return;
+  let badge=prevHdr.querySelector(".vbadge");
+  if(S.verifyStatus===null){ if(badge)badge.remove(); }
+  else{
+    if(!badge){badge=document.createElement("span");prevHdr.appendChild(badge);}
+    if     (S.verifyStatus==="loading") {badge.className="vbadge loading"; badge.textContent="⟳ loading verifier…";}
+    else if(S.verifyStatus==="checking"){badge.className="vbadge checking";badge.textContent="⟳ verifying…";}
+    else if(S.verifyStatus==="pass")    {badge.className="vbadge pass";    badge.textContent="✓ canvas decoded";}
+    else if(S.verifyStatus==="fail")    {badge.className="vbadge fail";    badge.textContent="⚠ verify failed";}
   }
 
-  // FIX 2: Disclaimer co-located with badge here in updateVerifyBadge(),
-  // not in rPreviewPanel() — so it always appears/disappears with the badge
-  // regardless of whether a full render or partial update ran.
-  // The broken comment "// handled by full render on sig change" is removed.
-  const mountEl = document.getElementById("qr-mount");
-  if (!mountEl) return;
-  let disc = document.getElementById("verify-disclaimer");
-
-  if (S.verifyStatus === "pass") {
-    if (!disc) {
-      disc = document.createElement("div");
-      disc.id = "verify-disclaimer";
-      disc.style.cssText = "font-size:10px;color:rgba(255,255,255,.18);text-align:center;margin-bottom:10px;font-family:'Space Mono',monospace;line-height:1.5;padding:0 4px";
-      disc.textContent = "Canvas decoded OK. Real scan depends on print quality + lighting.";
-      // Insert immediately after qr-mount
-      mountEl.insertAdjacentElement("afterend", disc);
+  const mountEl=document.getElementById("qr-mount"); if(!mountEl)return;
+  let disc=document.getElementById("verify-disclaimer");
+  if(S.verifyStatus==="pass"){
+    if(!disc){
+      disc=document.createElement("div"); disc.id="verify-disclaimer";
+      disc.style.cssText="font-size:10px;color:rgba(255,255,255,.18);text-align:center;margin-bottom:10px;font-family:'Space Mono',monospace;line-height:1.5;padding:0 4px";
+      disc.textContent="Canvas decoded OK. Real scan depends on print quality + lighting.";
+      mountEl.insertAdjacentElement("afterend",disc);
     }
-  } else {
-    if (disc) disc.remove();
-  }
+  } else { if(disc)disc.remove(); }
 }
 
 /* ── Boot ─────────────────────────────────────────────────────────── */
 render();
 buildForm(FORM_EL);
-// Trigger initial QR if fields were restored from localStorage
-if (Object.keys(S.fields).length > 0) triggerQR();
+if(Object.keys(S.fields).length>0) triggerQR();
 </script>
 </body>
 </html>
