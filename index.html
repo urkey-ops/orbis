@@ -616,8 +616,13 @@ function h(tag, attrs={}, ...kids) {
     else el.setAttribute(k,v);
   }
   for (const c of kids.flat(Infinity)) {
-    if (c==null||c===false) continue;
-    el.appendChild(typeof c==="string"?document.createTextNode(c):c);
+    if (c == null || c === false || c === true || c === undefined) continue;
+    if (typeof c === "string" || typeof c === "number") {
+      el.appendChild(document.createTextNode(String(c)));
+    } else if (c instanceof Node) {
+      el.appendChild(c);
+    }
+    // non-Node returns (e.g. null from rQRStats) are silently dropped
   }
   return el;
 }
@@ -658,8 +663,10 @@ const QRC = (() => {
   }
 
   function needsStyling(opts) {
+    // square dots + square eyes + no gradient + no logo = fast qrcode.js path
+    // dots/rounded always need the styling lib for non-square module shapes
     return opts.dotType !== "square" || opts.eyeRadius !== "square" ||
-           opts.useGrad || opts.logoSrc;
+           opts.useGrad || !!opts.logoSrc;
   }
 
   async function generate(opts) {
@@ -895,8 +902,8 @@ const QR_TYPES=[
   {id:"phone",label:"Phone",icon:"📞"},{id:"wifi",label:"WiFi",icon:"📶"},
   {id:"vcard",label:"vCard",icon:"👤"},
 ];
-const DOT_TYPES=["square","dots","rounded","extra-rounded","classy","classy-rounded"];
-const DOT_LABELS={square:"Square",dots:"Dots",rounded:"Rounded","extra-rounded":"X-Round",classy:"Classy","classy-rounded":"Classy+"};
+const DOT_TYPES=["square","dots","rounded"];
+const DOT_LABELS={square:"Square",dots:"Dots",rounded:"Rounded"};
 const EYE_RADII=["square","dot","extra-rounded"];
 const EYE_LABELS={square:"Square",dot:"Dot","extra-rounded":"Round"};
 const EC_LEVELS=["L","M","Q","H"];
@@ -1081,20 +1088,25 @@ function rTypeSelector(){
 }
 
 function rStyleTab(){
-  const needsStyling = S.dotType!=="square"||S.eyeRadius!=="square"||S.useGrad||S.logoSrc;
+  const isFast = S.dotType==="square" && S.eyeRadius==="square" && !S.useGrad && !S.logoSrc;
   return h("div",{},
     h("div",{class:"lbl"},"Module Shape"),
-    h("div",{class:"shape-grid"},
-      DOT_TYPES.map(d=>h("button",{class:"shape-btn"+(S.dotType===d?" on":""),onClick:()=>{update({dotType:d});triggerQR();}},DOT_LABELS[d]))
+    h("div",{style:"display:flex;gap:8px;margin-bottom:16px"},
+      DOT_TYPES.map(d=>h("button",{
+        class:"shape-btn"+(S.dotType===d?" on":""),
+        style:"flex:1;padding:10px 5px",
+        onClick:()=>{update({dotType:d});triggerQR();}
+      },DOT_LABELS[d]))
     ),
     h("div",{class:"lbl"},"Eye Style"),
-    h("div",{class:"eye-row"},
+    h("div",{class:"eye-row",style:"margin-bottom:16px"},
       EYE_RADII.map(e=>h("button",{class:"eye-btn"+(S.eyeRadius===e?" on":""),onClick:()=>{update({eyeRadius:e});triggerQR();}},EYE_LABELS[e]))
     ),
-    needsStyling ? h("div",{class:"qz-notice",style:"margin-top:12px"},
-      h("strong",{},"Styled mode: "),
-      "Using full styling library. Square modules + square eyes uses the fast encoder."
-    ) : null
+    h("div",{class:"qz-notice"},
+      isFast
+        ? h("span",{},[h("strong",{},"⚡ Fast mode — "), "Square + Square eye uses the built-in encoder. Instant generation, no extra library."])
+        : h("span",{},[h("strong",{},"🎨 Styled mode — "), "Loads the styling library for rounded/dot shapes. Slightly slower first generation."])
+    )
   );
 }
 
