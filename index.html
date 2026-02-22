@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>QR_studio v9</title>
+<title>QR_studio v9.1</title>
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
            script-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
@@ -319,6 +319,11 @@ let _workerDead = false;
 const _pending  = new Map();
 let   _reqId    = 0;
 
+// Monotonic generation token — guards against out-of-order worker responses
+// and stale verify results overwriting a newer QR
+let _genToken    = 0;
+let _verifyToken = 0;
+
 function getWorker() {
   if (_worker || _workerDead) return _worker;
   try {
@@ -387,12 +392,14 @@ async function qrFallback(payload, ec) {
   return { ok: true, grid, mc, version };
 }
 
-/* ── Warmup: spin up worker + warm jsQR after page load ──────────── */
+/* ── Warmup: spin up worker + warm jsQR + pre-warm fallback ─────── */
 // Worker importScripts run in background — zero main thread cost
-// jsQR (~60KB) loads in parallel — warm before first keystroke
+// jsQR (~60KB) + qrcode-generator both warm before first keystroke
+// qrcode-generator warmup ensures fallback path is ready if worker fails
 window.addEventListener("load", () => {
   getWorker();                        // creates worker, importScripts fires immediately
   ensureJsQR().catch(() => {});       // warm jsQR
+  ensureQRG().catch(() => {});        // warm fallback — same CDN, cached if worker already loaded it
 });
 
 /* ── Toast ───────────────────────────────────────────────────────── */
@@ -438,8 +445,20 @@ function validateFields(type, fields) {
   }
   if (type==="url") {
     const u = (fields.url||"").trim();
-    if (u && u.length > MAX_URL)    errs.url = `URL too long (max ${MAX_URL})`;
-    else if (u && !/^(https?:\/\/)?[\w\-.]+\.[\w\-.]+/.test(u)) errs.url = "Invalid URL";
+    if (u && u.length > MAX_URL) {
+      errs.url = `URL too long (max ${MAX_URL})`;
+    } else if (u) {
+      // Use URL constructor for reliable parsing — regex alone misses edge cases
+      try {
+        const testU = /^https?:\/\//i.test(u) ? u : "https://"+u;
+        const parsed = new URL(testU);
+        // Reject non-http(s) schemes that slipped through
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+          errs.url = "Invalid URL";
+      } catch {
+        errs.url = "Invalid URL";
+      }
+    }
   }
   if (type==="wifi" && !(fields.ssid||"").trim()) errs.ssid = "SSID required";
   if (type==="vcard" && !(fields.firstName||"").trim() && !(fields.lastName||"").trim())
@@ -448,7 +467,7 @@ function validateFields(type, fields) {
 }
 
 /* ── RFC 6350 escaping ───────────────────────────────────────────── */
-function vcEsc(v) { return capField(v,MAX_FIELD).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
+function vcEsc(v) { return capField(v,MAX_FIELD).replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
 function vcTel(v) { return (v||"").replace(/[^\d+\-().\s]/g,"").trim().slice(0,30); }
 function wfEsc(v) { return (v||"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
 
@@ -462,9 +481,9 @@ function buildData(type, f) {
     }
     case "text":  return capField(f.text||"", MAX_TEXT);
     case "email": return `mailto:${(f.email||"").trim()}?subject=${encodeURIComponent(capField(f.subject||"",200))}&body=${encodeURIComponent(capField(f.body||"",1000))}`;
-    case "sms":   return `sms:${vcTel(f.phone)}${f.message?`?body=${encodeURIComponent(capField(f.message||"",160))}`:""}`; 
+    case "sms":   return `sms:${vcTel(f.phone)}${(f.message != null && f.message !== "")?`?body=${encodeURIComponent(capField(f.message,160))}`:""}`;  
     case "phone": return `tel:${vcTel(f.phone)}`;
-    case "wifi":  return `WIFI:T:${f.security||"WPA"};S:${wfEsc(capField(f.ssid||"",64))};P:${wfEsc(capField(f.password||"",64))};;`;
+    case "wifi":  return `WIFI:T:${f.security==="None"?"nopass":f.security||"WPA"};S:${wfEsc(capField(f.ssid||"",64))};P:${wfEsc(capField(f.password||"",64))};;`;
     case "vcard": {
       const fn = [f.firstName,f.lastName].filter(Boolean).map(vcEsc).join(" ");
       return [
@@ -522,32 +541,39 @@ function drawGrid(grid, mc, canvasSize, hasMargin) {
    Runs on main thread after draw — canvas pixels are already there.
 ══════════════════════════════════════════════════════════════════════ */
 async function verifyWithJsQR(expectedData, canvas) {
+  // Capture token before any await — if a newer verify starts, this one aborts
+  const myToken = ++_verifyToken;
   update({ verifyStatus: "checking" });
   try {
     const jsQR  = await ensureJsQR();
+    if (myToken !== _verifyToken) return; // stale — newer verify already running
     const ctx   = canvas.getContext("2d", { willReadFrequently: true });
     const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const res   = jsQR(idata.data, idata.width, idata.height, {
       inversionAttempts: "dontInvert" // B&W default — skip inversion, faster
     });
+    if (myToken !== _verifyToken) return; // stale — newer verify finished first
     update({ verifyStatus: res?.data === expectedData ? "pass" : "fail" });
     if (res && res.data !== expectedData)
-      console.warn("[QR v9] Mismatch\nExpected:", expectedData, "\nDecoded:", res.data);
+      console.warn("[QR v9.1] Mismatch\nExpected:", expectedData, "\nDecoded:", res.data);
   } catch {
-    update({ verifyStatus: null });
+    if (myToken === _verifyToken) update({ verifyStatus: null });
   }
 }
 
+/* ── Friendly error messages for known qrcode-generator failures ─── */
+function friendlyQRError(msg) {
+  if (!msg) return "QR generation failed";
+  if (/code length overflow/i.test(msg)) return "Data too long for this error correction level — try L or M";
+  if (/invalid/i.test(msg))             return "Invalid data for QR encoding";
+  return "QR generation failed: " + msg;
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   QRController v9
+   QRController v9.1
 ══════════════════════════════════════════════════════════════════════ */
 const QRC = (() => {
   let _lastSig = null;
-
-  function clampEC(ec, hasLogo) {
-    if (!hasLogo) return ec;  // no logo in v9 — always returns ec as-is
-    return ec;
-  }
 
   function mount() { return document.getElementById("qr-mount"); }
 
@@ -561,9 +587,10 @@ const QRC = (() => {
     if (s === _lastSig) return;
     _lastSig = s;
 
-    update({ verifyStatus: "checking", hasQR: false });
+    // Monotonic generation token — any awaited code checks this before touching DOM
+    const myToken = ++_genToken;
 
-    // Show scanline immediately
+    update({ verifyStatus: "checking", hasQR: false });
     syncMount();
 
     try {
@@ -571,9 +598,21 @@ const QRC = (() => {
       let result;
       try {
         result = await qrViaWorker(opts.data, opts.ecLevel);
-      } catch {
-        result = await qrFallback(opts.data, opts.ecLevel);
+      } catch(workerErr) {
+        // Worker failed — try main-thread fallback
+        try {
+          result = await qrFallback(opts.data, opts.ecLevel);
+        } catch(fallbackErr) {
+          // Both paths failed — surface a clear error
+          if (myToken !== _genToken) return;
+          toast("Cannot generate QR — network unavailable. Check connection and try again.", "er", 5000);
+          update({ verifyStatus: null, hasQR: false, qrVersion: 1 });
+          return;
+        }
       }
+
+      // Stale check — a newer generate() call already took over
+      if (myToken !== _genToken) return;
 
       if (!result.ok) throw new Error(result.error);
 
@@ -586,6 +625,8 @@ const QRC = (() => {
 
       const canvas = drawGrid(grid, mc, canvasSize, opts.hasMargin);
 
+      if (myToken !== _genToken) return; // stale — don't touch DOM
+
       el.innerHTML = "";
       el.appendChild(canvas);
       update({ hasQR: true });
@@ -594,14 +635,15 @@ const QRC = (() => {
       verifyWithJsQR(opts.data, canvas);
 
     } catch(e) {
-      toast("Generation failed: " + e.message, "er");
+      if (myToken !== _genToken) return;
+      toast(friendlyQRError(e.message), "er");
       update({ verifyStatus: null, hasQR: false, qrVersion: 1 });
     }
   }
 
   function clear() {
     const el = mount(); if (!el) return;
-    _lastSig = null;
+    _lastSig = null; // reset so switching back to same type regenerates
     el.innerHTML = "";
     const hint = document.createElement("div"); hint.className = "empty-hint";
     const big  = document.createElement("div"); big.className  = "big"; big.textContent = "▣";
@@ -762,7 +804,7 @@ function patchInput(container, key, label, placeholder, type="text") {
       const errs = validateFields(S.qrType, nf);
       update({fields:nf, fieldErrs:errs});
       lsSetFields(S.qrType, nf);
-      scheduleQR(nf);
+      scheduleQR(); // reads S.fields — always current after update()
     });
     wrap.appendChild(lbl); wrap.appendChild(inp); wrap.appendChild(err);
     container.appendChild(wrap);
@@ -786,7 +828,7 @@ function patchTextarea(container, key, label, placeholder) {
     const ta  = document.createElement("textarea"); ta.placeholder=placeholder;
     ta.addEventListener("input", e => {
       const nf = {...S.fields, [key]: e.target.value};
-      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR(nf);
+      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR();
     });
     wrap.appendChild(lbl); wrap.appendChild(ta); container.appendChild(wrap);
   }
@@ -808,7 +850,7 @@ function patchSelect(container, key, label, options) {
     });
     sel.addEventListener("change", e => {
       const nf = {...S.fields, [key]: e.target.value};
-      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR(nf);
+      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR();
     });
     wrap.appendChild(lbl); wrap.appendChild(sel); container.appendChild(wrap);
   }
@@ -873,13 +915,15 @@ function getNeededKeys(type) {
 
 /* ── QR scheduling — 180ms debounce ─────────────────────────────── */
 let _qrTimer = null;
-function scheduleQR(fields) {
+function scheduleQR() {
   if (_qrTimer) clearTimeout(_qrTimer);
-  _qrTimer = setTimeout(() => triggerQR(fields), 180);
+  _qrTimer = setTimeout(() => triggerQR(), 180);
 }
-function triggerQR(fields) {
+function triggerQR() {
+  // Always read S.fields — never accept a passed argument that may be stale
+  // from a previous debounce cycle when multiple fields fired in rapid succession
   _qrTimer = null;
-  const f    = fields !== undefined ? fields : S.fields;
+  const f    = S.fields;
   const errs = validateFields(S.qrType, f);
   if (Object.keys(errs).length) { QRC.clear(); return; }
   const raw  = buildData(S.qrType, f);
@@ -928,7 +972,7 @@ function rHeader() {
         h("div",{class:"logo-name"},"QR",h("span",{},"_"),"studio")
       ),
       h("div",{class:"hdr-badges"},
-        h("div",{class:"hdr-badge v9"},"v9"),
+        h("div",{class:"hdr-badge v9"},"v9.1"),
         h("div",{class:"hdr-badge"},"ENCODE")
       )
     )
@@ -946,7 +990,7 @@ function rTypeSelector() {
           const saved = lsGet("qrs_fields_"+t.id, {});
           const errs  = validateFields(t.id, saved);
           update({qrType:t.id, fields:saved, fieldErrs:errs}, () => {
-            buildForm(FORM_EL); triggerQR(saved);
+            buildForm(FORM_EL); triggerQR();
           });
         }
       }, h("span",{class:"ico"},t.icon), t.label))
@@ -1046,7 +1090,6 @@ function render() {
 
   // Always sync mount (cheap)
   syncMount(hasData);
-  updateVerifyBadge();
 
   if (sig === _prevSig) return;
   _prevSig = sig;
