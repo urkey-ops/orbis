@@ -7,11 +7,11 @@
 <!-- CSP: restrict scripts to known CDNs + self -->
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
-           script-src 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+           script-src 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com;
            style-src 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
            font-src https://fonts.gstatic.com;
            img-src 'self' data: blob:;
-           connect-src https://unpkg.com;">
+           connect-src 'none';">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://unpkg.com"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
@@ -316,17 +316,13 @@ function loadScript(src) {
 }
 
 /* ── Library loaders ──────────────────────────────────────────────── */
+// Only one external script dependency: qrcode.js for matrix generation.
+// All dot/eye styling is done natively on canvas — no qr-code-styling lib.
 let _qrP = null;
 function ensureQR() {
   if (!_qrP) _qrP = loadScript("https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js")
     .then(() => { if (!window.QRCode) throw new Error("QRCode not found"); return window.QRCode; });
   return _qrP;
-}
-let _styP = null;
-function ensureStyling() {
-  if (!_styP) _styP = loadScript("https://unpkg.com/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js")
-    .then(() => { if (!window.QRCodeStyling) throw new Error("QRCodeStyling not found"); return window.QRCodeStyling; });
-  return _styP;
 }
 let _zxP = null;
 function ensureZXing() {
@@ -628,12 +624,168 @@ function h(tag, attrs={}, ...kids) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   QRController v6 (sanitized)
+   Native canvas QR renderer
+   — qrcode.js generates the matrix (raw boolean grid)
+   — we paint it ourselves: square / dots / rounded
+   — zero dependency on qr-code-styling
+═══════════════════════════════════════════════════════════════════ */
+
+/* Draw a single module (dot) onto ctx */
+function drawModule(ctx, x, y, size, dotType, color) {
+  ctx.fillStyle = color;
+  if (dotType === "dots") {
+    ctx.beginPath();
+    ctx.arc(x + size/2, y + size/2, size/2 * 0.85, 0, Math.PI*2);
+    ctx.fill();
+  } else if (dotType === "rounded") {
+    const r = size * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + size - r, y);
+    ctx.quadraticCurveTo(x + size, y, x + size, y + r);
+    ctx.lineTo(x + size, y + size - r);
+    ctx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
+    ctx.lineTo(x + r, y + size);
+    ctx.quadraticCurveTo(x, y + size, x, y + size - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillRect(x, y, size, size);
+  }
+}
+
+/* Draw one of the three finder patterns (top-left, top-right, bottom-left) */
+function drawFinder(ctx, ox, oy, modSize, eyeRadius, color) {
+  const total = modSize * 7;
+  const r = eyeRadius === "dot" ? modSize * 1.2
+           : eyeRadius === "rounded" ? modSize * 0.8
+           : 0;
+
+  // Outer ring fill (7×7)
+  ctx.fillStyle = color;
+  if (r > 0) {
+    roundRect(ctx, ox, oy, total, total, r);
+  } else {
+    ctx.fillRect(ox, oy, total, total);
+  }
+  // Inner white gap (5×5)
+  const bg = ctx.canvas._bgColor || "#ffffff";
+  ctx.fillStyle = bg;
+  const ri = r > 0 ? r * 0.6 : 0;
+  if (ri > 0) {
+    roundRect(ctx, ox + modSize, oy + modSize, modSize*5, modSize*5, ri);
+  } else {
+    ctx.fillRect(ox + modSize, oy + modSize, modSize*5, modSize*5);
+  }
+  // Center dot (3×3)
+  ctx.fillStyle = color;
+  const rc = r > 0 ? r * 0.5 : 0;
+  if (rc > 0) {
+    roundRect(ctx, ox + modSize*2, oy + modSize*2, modSize*3, modSize*3, rc);
+  } else {
+    ctx.fillRect(ox + modSize*2, oy + modSize*2, modSize*3, modSize*3);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* Main native renderer — returns a canvas */
+async function renderNative(opts) {
+  const QRCode = await ensureQR();
+  const effectiveEC = opts.ecLevel;
+  const byteLen = new TextEncoder().encode(opts.data).length;
+  const ver = getQRVersion(byteLen, effectiveEC);
+  const mc = moduleCount(ver);
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const canvasSize = Math.max(400, 400 * dpr);
+  const qzModules = opts.hasMargin ? 4 : 0;
+  const modSize = canvasSize / (mc + qzModules * 2);
+  const offset = qzModules * modSize;
+
+  // Get raw boolean matrix from qrcode.js
+  const qrObj = QRCode.create(opts.data, { errorCorrectionLevel: effectiveEC });
+  const matrix = qrObj.modules;
+  const size = matrix.size;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasSize;
+  canvas.height = canvasSize;
+  canvas._bgColor = opts.bgColor; // store for finder drawing
+
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  // Background
+  ctx.fillStyle = opts.bgColor;
+  ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+  // Finder pattern positions (top-left corners in module coords)
+  const finderPositions = [
+    {r:0, c:0}, {r:0, c:size-7}, {r:size-7, c:0}
+  ];
+  const isFinderModule = (r, c) => finderPositions.some(fp =>
+    r >= fp.r && r < fp.r+7 && c >= fp.c && c < fp.c+7
+  );
+
+  // Draw data modules (skip finder zones)
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (!matrix.get(r, c)) continue;
+      if (isFinderModule(r, c)) continue;
+      const x = offset + c * modSize;
+      const y = offset + r * modSize;
+      drawModule(ctx, x, y, modSize, opts.dotType, opts.fgColor);
+    }
+  }
+
+  // Draw finder patterns with eye style
+  finderPositions.forEach(fp => {
+    drawFinder(ctx,
+      offset + fp.c * modSize,
+      offset + fp.r * modSize,
+      modSize, opts.eyeRadius, opts.fgColor
+    );
+  });
+
+  // Overlay logo if present
+  if (opts.logoSrc && isSafeImageDataURI(opts.logoSrc)) {
+    await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const lsz = Math.floor(canvasSize * (opts.logoSize / 100));
+        const lx = (canvasSize - lsz) / 2;
+        const ly = (canvasSize - lsz) / 2;
+        // White padding
+        const pad = lsz * 0.08;
+        ctx.fillStyle = opts.bgColor;
+        ctx.fillRect(lx - pad, ly - pad, lsz + pad*2, lsz + pad*2);
+        ctx.drawImage(img, lx, ly, lsz, lsz);
+        resolve();
+      };
+      img.onerror = resolve; // skip silently on error
+      img.src = opts.logoSrc;
+    });
+  }
+
+  return canvas;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   QRController v6 — native only
 ═══════════════════════════════════════════════════════════════════ */
 const QRC = (() => {
-  let _styInst = null;
   let _lastSig = null;
-  let _obs = null;
 
   function clampEC(ec, logoSrc, logoSize) {
     if (!logoSrc || logoSize === 0) return ec;
@@ -645,40 +797,24 @@ const QRC = (() => {
   function mount() { return document.getElementById("qr-mount"); }
 
   function sig(o) {
-    return [o.data,o.dotType,o.eyeRadius,o.fgColor,o.bgColor,o.useGrad,o.gradEnd,o.ecLevel,o.logoSrc?"y":"n",o.logoSize,o.hasMargin].join("|");
-  }
-
-  function waitForCanvas(el) {
-    return new Promise(resolve => {
-      const existing = el.querySelector("canvas");
-      if (existing) { resolve(existing); return; }
-      if (_obs) _obs.disconnect();
-      _obs = new MutationObserver(() => {
-        const c = el.querySelector("canvas");
-        if (c) { _obs.disconnect(); _obs=null; resolve(c); }
-      });
-      _obs.observe(el, { childList:true, subtree:true });
-      setTimeout(() => { if(_obs){_obs.disconnect();_obs=null;} resolve(null); }, 3500);
-    });
-  }
-
-  function needsStyling(opts) {
-    // square dots + square eyes + no gradient + no logo = fast qrcode.js path
-    // dots/rounded always need the styling lib for non-square module shapes
-    return opts.dotType !== "square" || opts.eyeRadius !== "square" ||
-           opts.useGrad || !!opts.logoSrc;
+    return [o.data,o.dotType,o.eyeRadius,o.fgColor,o.bgColor,o.ecLevel,o.logoSrc?"y":"n",o.logoSize,o.hasMargin].join("|");
   }
 
   async function generate(opts) {
     const el = mount(); if (!el) return;
-    // [S6] Sanitize colors before use
     const safeFg = safeHex(opts.fgColor, "#000000");
     const safeBg = safeHex(opts.bgColor, "#ffffff");
-    const safeGradEnd = safeHex(opts.gradEnd, "#000000");
-    const sanitizedOpts = { ...opts, fgColor: safeFg, bgColor: safeBg, gradEnd: safeGradEnd };
+    const effectiveEC = clampEC(opts.ecLevel, opts.logoSrc, opts.logoSize);
 
-    const effectiveEC = clampEC(sanitizedOpts.ecLevel, sanitizedOpts.logoSrc, sanitizedOpts.logoSize);
-    const s = sig({...sanitizedOpts, ecLevel: effectiveEC});
+    const sanitizedOpts = {
+      ...opts,
+      fgColor: safeFg, bgColor: safeBg,
+      ecLevel: effectiveEC,
+      dotType: ["square","dots","rounded"].includes(opts.dotType) ? opts.dotType : "square",
+      eyeRadius: ["square","dot","rounded"].includes(opts.eyeRadius) ? opts.eyeRadius : "square",
+    };
+
+    const s = sig(sanitizedOpts);
     if (s === _lastSig) return;
     _lastSig = s;
 
@@ -688,54 +824,10 @@ const QRC = (() => {
     const ver = getQRVersion(byteLen, effectiveEC);
     update({ qrVersion: ver });
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    const canvasTarget = Math.max(400, 400 * dpr);
-    const qzPx = sanitizedOpts.hasMargin ? quietZonePx(ver, canvasTarget) : 0;
-
-    const useStyling = needsStyling(sanitizedOpts);
-
     try {
-      if (useStyling) {
-        await ensureStyling();
-        // [S7] Logo must be a safe data URI
-        const safeLogo = (sanitizedOpts.logoSrc && isSafeImageDataURI(sanitizedOpts.logoSrc))
-          ? sanitizedOpts.logoSrc : null;
-        const qOpts = {
-          width: canvasTarget, height: canvasTarget,
-          data: sanitizedOpts.data,
-          dotsOptions: sanitizedOpts.useGrad
-            ? { type: sanitizedOpts.dotType, gradient: { type:"linear", rotation:0.8, colorStops:[{offset:0,color:safeFg},{offset:1,color:safeGradEnd}] } }
-            : { type: sanitizedOpts.dotType, color: safeFg },
-          cornersSquareOptions: {
-            type: sanitizedOpts.eyeRadius==="dot"?"dot":sanitizedOpts.eyeRadius==="extra-rounded"?"extra-rounded":"square",
-            color: safeFg
-          },
-          cornersDotOptions: { type: sanitizedOpts.eyeRadius==="dot"?"dot":"square", color: safeFg },
-          backgroundOptions: { color: safeBg },
-          qrOptions: { errorCorrectionLevel: effectiveEC },
-          margin: qzPx,
-          ...(safeLogo ? { image: safeLogo, imageOptions:{imageSize:sanitizedOpts.logoSize/100,margin:5,crossOrigin:"anonymous"} } : {})
-        };
-        if (_styInst) {
-          _styInst.update(qOpts);
-        } else {
-          el.innerHTML = ""; _styInst = null;
-          _styInst = new window.QRCodeStyling(qOpts);
-          _styInst.append(el);
-        }
-      } else {
-        const QRCode = await ensureQR();
-        el.innerHTML = ""; _styInst = null;
-        const canvas = document.createElement("canvas");
-        canvas.width = canvasTarget; canvas.height = canvasTarget;
-        el.appendChild(canvas);
-        await QRCode.toCanvas(canvas, sanitizedOpts.data, {
-          errorCorrectionLevel: effectiveEC,
-          width: canvasTarget,
-          margin: Math.ceil(qzPx / (canvasTarget / moduleCount(ver))),
-          color: { dark: safeFg, light: safeBg }
-        });
-      }
+      const canvas = await renderNative(sanitizedOpts);
+      el.innerHTML = "";
+      el.appendChild(canvas);
     } catch(e) {
       toast("QR generation failed: " + e.message, "er");
       update({ verifyStatus: null, hasQR: false });
@@ -744,26 +836,24 @@ const QRC = (() => {
 
     update({ hasQR: true });
 
-    waitForCanvas(el).then(canvas => {
-      if (canvas) {
-        const fc = sampleFinderContrast(canvas);
-        update({ finderOk: fc.sampled ? fc.ok : null });
-        autoVerify(sanitizedOpts.data, canvas);
-      } else {
-        update({ verifyStatus: null });
-      }
-    });
+    const canvas = el.querySelector("canvas");
+    if (canvas) {
+      const fc = sampleFinderContrast(canvas);
+      update({ finderOk: fc.sampled ? fc.ok : null });
+      autoVerify(sanitizedOpts.data, canvas);
+    } else {
+      update({ verifyStatus: null });
+    }
   }
 
   function clear() {
     const el = mount(); if (!el) return;
-    if (_obs) { _obs.disconnect(); _obs=null; }
-    _styInst = null; _lastSig = null;
+    _lastSig = null;
     el.innerHTML = "";
     update({ verifyStatus:null, hasQR:false, qrVersion:1, finderOk:null });
   }
 
-  function getInstance() { return _styInst; }
+  function getInstance() { return null; } // no external lib instance
   function getClampEC(ec, ls, lsz) { return clampEC(ec, ls, lsz); }
   return { generate, clear, getInstance, clampEC: getClampEC };
 })();
@@ -860,11 +950,9 @@ function downloadBatch() {
 
 /* ── Download ─────────────────────────────────────────────────────── */
 function dlQR(fmt) {
-  const inst = QRC.getInstance();
-  if (inst) { inst.download({ name:"qrcode", extension:fmt }); return; }
   const c = document.getElementById("qr-mount")?.querySelector("canvas");
   if (!c) { toast("Generate a QR first","wn"); return; }
-  if (fmt === "svg") { toast("SVG export requires custom dot styles","wn"); return; }
+  if (fmt === "svg") { toast("SVG export not available in native mode — downloading PNG","wn"); }
   const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = "qrcode.png"; a.click();
 }
 
@@ -1368,8 +1456,7 @@ function rPreviewPanel(rawData){
         title:"Simulate low-light / bad camera phone worst case"
       },S.lowlight?"🔆 Low-light ON — click to disable":"🌑 Simulate low-light camera"),
       h("div",{class:"dl-row"},
-        h("button",{class:"btn-main",onClick:()=>dlQR("png")},"⬇ Download PNG"),
-        h("button",{class:"btn-out",onClick:()=>dlQR("svg")},"⬇ SVG")
+        h("button",{class:"btn-main",onClick:()=>dlQR("png")},"⬇ Download PNG")
       ),
       h("div",{class:"cp-row"},
         h("button",{class:"btn-g"+(S.imgCopied?" done":""),onClick:copyImg},S.imgCopied?"✓ Copied!":"⎘ Copy Image"),
