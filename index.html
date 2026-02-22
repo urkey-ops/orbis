@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>QR_studio v9.2</title>
+<title>QR_studio v9.3</title>
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
            script-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
@@ -763,6 +763,15 @@ function update(patch, afterRender) {
   }
 }
 
+/* Silent state mutation — updates S without scheduling a render.
+   Used by input handlers so keystrokes never trigger root.innerHTML = ""
+   which would detach FORM_EL and steal focus from the active input.
+   Field values and fieldErrs are managed imperatively in the DOM;
+   they don't need a render cycle. */
+function silentMutate(patch) {
+  Object.assign(S, typeof patch === "function" ? patch(S) : patch);
+}
+
 /* ── h() — zero innerHTML, safe DOM builder ──────────────────────── */
 function h(tag, attrs={}, ...kids) {
   const el = document.createElement(tag);
@@ -811,26 +820,43 @@ function patchInput(container, key, label, placeholder, type="text") {
     const lbl = document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
     const inp = document.createElement("input"); inp.type=type; inp.placeholder=placeholder;
     const err = document.createElement("div"); err.className="fld-err";
+
     inp.addEventListener("input", e => {
-      const nf = {...S.fields, [key]: e.target.value};
+      const nf   = {...S.fields, [key]: e.target.value};
       const errs = validateFields(S.qrType, nf);
-      update({fields:nf, fieldErrs:errs});
+
+      // Silent mutation — never triggers render, never touches root.innerHTML,
+      // never detaches FORM_EL, never steals focus. This is the key fix.
+      silentMutate({fields: nf, fieldErrs: errs});
       lsSetFields(S.qrType, nf);
+
+      // Update error display imperatively — no render needed
+      const msg = errs[key];
+      if (msg) {
+        inp.classList.add("err"); err.textContent = msg; err.classList.add("show");
+      } else {
+        inp.classList.remove("err"); err.textContent = ""; err.classList.remove("show");
+      }
+
       // Paste/drop → near-instant QR. Keyboard → wait for pause.
       const isPaste = e.inputType === "insertFromPaste" ||
                       e.inputType === "insertFromDrop"  ||
                       e.inputType === "insertFromPasteAsQuotation";
       scheduleQR(isPaste);
     });
+
     wrap.appendChild(lbl); wrap.appendChild(inp); wrap.appendChild(err);
     container.appendChild(wrap);
   }
+
   const inp = wrap.querySelector("input");
   const err = wrap.querySelector(".fld-err");
+  // Only sync value when not actively editing (avoids cursor jump)
   if (document.activeElement !== inp && inp.value !== (S.fields[key]||""))
     inp.value = S.fields[key]||"";
   inp.type = type; inp.placeholder = placeholder;
   wrap.querySelector(".lbl").textContent = label;
+  // Sync error state on render (e.g. after type switch)
   const msg = S.fieldErrs[key];
   if (msg) { inp.classList.add("err"); err.textContent=msg; err.classList.add("show"); }
   else     { inp.classList.remove("err"); err.textContent=""; err.classList.remove("show"); }
@@ -844,7 +870,8 @@ function patchTextarea(container, key, label, placeholder) {
     const ta  = document.createElement("textarea"); ta.placeholder=placeholder;
     ta.addEventListener("input", e => {
       const nf = {...S.fields, [key]: e.target.value};
-      update({fields:nf}); lsSetFields(S.qrType, nf);
+      silentMutate({fields: nf});
+      lsSetFields(S.qrType, nf);
       const isPaste = e.inputType === "insertFromPaste" ||
                       e.inputType === "insertFromDrop"  ||
                       e.inputType === "insertFromPasteAsQuotation";
@@ -870,7 +897,9 @@ function patchSelect(container, key, label, options) {
     });
     sel.addEventListener("change", e => {
       const nf = {...S.fields, [key]: e.target.value};
-      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR();
+      silentMutate({fields: nf});
+      lsSetFields(S.qrType, nf);
+      scheduleQR(false);
     });
     wrap.appendChild(lbl); wrap.appendChild(sel); container.appendChild(wrap);
   }
@@ -1001,7 +1030,7 @@ function rHeader() {
         h("div",{class:"logo-name"},"QR",h("span",{},"_"),"studio")
       ),
       h("div",{class:"hdr-badges"},
-        h("div",{class:"hdr-badge v9"},"v9.2"),
+        h("div",{class:"hdr-badge v9"},"v9.3"),
         h("div",{class:"hdr-badge"},"ENCODE")
       )
     )
@@ -1113,8 +1142,7 @@ function render() {
   const sig = [
     S.qrType, S.ecLevel, S.hasMargin,
     hasData, S.hasQR, S.qrVersion,
-    S.imgCopied, S.dataCopied,
-    Object.keys(S.fieldErrs).join(",")
+    S.imgCopied, S.dataCopied
   ].join("|");
 
   // Always sync mount (cheap)
