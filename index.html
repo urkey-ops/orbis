@@ -3,16 +3,18 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>QR_studio v8</title>
+<title>QR_studio v9</title>
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
-           script-src 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com;
+           script-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
+           worker-src blob:;
            style-src 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
            font-src https://fonts.gstatic.com;
            img-src 'self' data: blob:;
-           connect-src 'none';">
+           connect-src https://unpkg.com https://cdn.jsdelivr.net;">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://unpkg.com"/>
+<link rel="preconnect" href="https://cdn.jsdelivr.net"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -39,7 +41,9 @@ input,textarea,select{
   color:#e4ebe0;padding:9px 12px;font-size:14px;width:100%;
   outline:none;transition:border-color .15s,box-shadow .15s;
 }
-input:focus,textarea:focus,select:focus{border-color:var(--a);box-shadow:0 0 0 3px rgba(184,244,0,.06)}
+input:focus,textarea:focus,select:focus{
+  border-color:var(--a);box-shadow:0 0 0 3px rgba(184,244,0,.06)
+}
 input::placeholder,textarea::placeholder{color:rgba(255,255,255,.16)}
 option{background:#141a12}
 textarea{resize:vertical;min-height:68px}
@@ -47,11 +51,11 @@ button{cursor:pointer;font-family:inherit;border:none;transition:all .15s}
 button:active{transform:scale(.96)}
 input[type=range]{padding:0;background:none;border:none;accent-color:var(--a);cursor:pointer;height:4px}
 input[type=range]:focus{box-shadow:none;border:none}
-input[type=color]{padding:2px;border:none;background:none;cursor:pointer;width:100%;height:100%}
 input.err{border-color:rgba(255,68,85,.5)!important;box-shadow:0 0 0 3px rgba(255,68,85,.06)!important}
 
 @keyframes toastIn{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
-@keyframes scanline{0%{top:-4px}100%{top:calc(100% + 4px)}}
+@keyframes scanline{0%{top:-4px}100%{top:calc(100%+4px)}}
+@keyframes popIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 
 /* ── layout ─────────────────────────────────────────────────────── */
 header{
@@ -61,33 +65,37 @@ header{
   backdrop-filter:blur(20px);
   padding:0 24px;
 }
-.hdr-inner{max-width:1100px;margin:0 auto;height:54px;display:flex;align-items:center;justify-content:space-between}
+.hdr-inner{max-width:1060px;margin:0 auto;height:54px;display:flex;align-items:center;justify-content:space-between}
 .logo{display:flex;align-items:center;gap:9px}
 .logo-box{width:28px;height:28px;background:var(--a);border-radius:6px;display:grid;place-items:center;font-size:13px;flex-shrink:0}
 .logo-name{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;letter-spacing:-1px;color:#e4ebe0}
 .logo-name span{color:var(--a)}
 .hdr-badges{display:flex;gap:6px;align-items:center}
 .hdr-badge{font-family:'Space Mono',monospace;font-size:10px;color:rgba(184,244,0,.45);letter-spacing:2px;border:1px solid var(--bord);padding:4px 10px;border-radius:20px}
-.hdr-badge.v8{color:rgba(255,160,64,.7);border-color:rgba(255,160,64,.25)}
+.hdr-badge.v9{color:rgba(255,160,64,.8);border-color:rgba(255,160,64,.28)}
 
-.main{max-width:1100px;margin:0 auto;padding:24px 24px 60px}
-.grid{display:grid;grid-template-columns:1fr 390px;gap:16px;align-items:start}
-@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.main{max-width:1060px;margin:0 auto;padding:24px 24px 60px}
+.grid{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
+@media(max-width:840px){.grid{grid-template-columns:1fr}}
 
 .sec{background:var(--card);border:1px solid var(--bord);border-radius:14px;padding:20px}
 .sec+.sec{margin-top:14px}
-.sec-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px}
+.sec-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;
+  color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px}
 
 /* ── type selector ───────────────────────────────────────────────── */
 .type-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-@media(max-width:600px){.type-grid{grid-template-columns:repeat(4,1fr)}}
-.type-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:9px;border:1px solid var(--bord2);background:transparent;color:var(--mut);font-size:11px;font-weight:600}
+@media(max-width:580px){.type-grid{grid-template-columns:repeat(4,1fr)}}
+.type-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;
+  border-radius:9px;border:1px solid var(--bord2);background:transparent;
+  color:var(--mut);font-size:11px;font-weight:600}
 .type-btn .ico{font-size:16px}
 .type-btn.on{border-color:var(--a);background:var(--a10);color:var(--a)}
 .type-btn:hover:not(.on){border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.6)}
 
 /* ── form ─────────────────────────────────────────────────────────── */
-.lbl{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:rgba(255,255,255,.24);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
+.lbl{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;
+  color:rgba(255,255,255,.24);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
 .fld{margin-bottom:12px}
 .fld:last-child{margin-bottom:0}
 .fld-err{font-size:10px;color:var(--danger);font-family:'Space Mono',monospace;margin-top:3px;display:none}
@@ -95,136 +103,82 @@ header{
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* ── settings ─────────────────────────────────────────────────────── */
-.ec-row{display:flex;gap:6px;margin-bottom:5px}
-.ecb{flex:1;padding:8px 0;border-radius:7px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-weight:700;font-size:13px;font-family:'Space Mono',monospace}
+.ec-row{display:flex;gap:6px;margin-bottom:14px}
+.ecb{flex:1;padding:8px 0;border-radius:7px;border:1px solid var(--bord2);
+  background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);
+  font-weight:700;font-size:13px;font-family:'Space Mono',monospace}
 .ecb.on{border-color:var(--a);background:var(--a);color:var(--dark)}
-.ecb.clamped{border-color:rgba(184,244,0,.4);color:var(--a)}
-.ec-hint{font-size:10px;color:rgba(255,255,255,.16);font-family:'Space Mono',monospace;margin-bottom:14px;line-height:1.6}
+.ecb:hover:not(.on){border-color:rgba(255,255,255,.14);color:rgba(255,255,255,.6)}
 
-.tog-row{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-.tog{width:34px;height:18px;border-radius:9px;background:rgba(255,255,255,.08);position:relative;cursor:pointer;transition:background .18s;flex-shrink:0;border:none;padding:0;display:block}
+.tog-row{display:flex;align-items:center;gap:9px;margin-bottom:0}
+.tog{width:34px;height:18px;border-radius:9px;background:rgba(255,255,255,.08);
+  position:relative;cursor:pointer;transition:background .18s;flex-shrink:0;border:none;padding:0;display:block}
 .tog.on{background:var(--a)}
-.tog-k{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .18s;pointer-events:none}
+.tog-k{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:#fff;transition:left .18s;pointer-events:none}
 .tog.on .tog-k{left:18px}
 .tog-lbl{font-size:13px;color:var(--mut);cursor:pointer;user-select:none}
-
-/* ── notices ─────────────────────────────────────────────────────── */
-.notice{padding:8px 10px;border-radius:7px;background:rgba(184,244,0,.04);border:1px solid var(--bord);font-size:11px;color:rgba(255,255,255,.3);line-height:1.6;margin-bottom:10px}
-.notice strong{color:rgba(184,244,0,.6);font-weight:600}
-.notice.warn{background:rgba(255,160,64,.05);border-color:rgba(255,160,64,.2);color:rgba(255,160,64,.75)}
-.notice.warn strong{color:var(--warn)}
-.notice.bad{background:rgba(255,68,85,.05);border-color:rgba(255,68,85,.2);color:rgba(255,68,85,.75)}
-.notice.bad strong{color:var(--danger)}
-
-/* ── advanced disclosure ─────────────────────────────────────────── */
-.adv-toggle{
-  width:100%;padding:9px 12px;border-radius:8px;
-  border:1px solid var(--bord2);background:rgba(255,255,255,.02);
-  color:rgba(255,255,255,.35);font-size:12px;font-weight:600;
-  text-align:left;display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:8px;
-}
-.adv-toggle:hover{border-color:rgba(255,255,255,.14);color:rgba(255,255,255,.6)}
-.adv-toggle.open{border-color:rgba(255,160,64,.3);color:var(--warn);background:rgba(255,160,64,.04)}
-.adv-toggle .arr{font-size:10px;transition:transform .15s}
-.adv-toggle.open .arr{transform:rotate(180deg)}
-.adv-body{padding:12px;border-radius:8px;background:rgba(255,255,255,.018);border:1px solid var(--bord2);margin-bottom:10px}
-
-/* ── color pickers (opt-in only) ─────────────────────────────────── */
-.c-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.c-lbl{font-size:13px;color:var(--mut)}
-.c-ctrl{display:flex;align-items:center;gap:7px}
-.swatch{width:28px;height:28px;border-radius:5px;border:2px solid rgba(255,255,255,.1);position:relative;overflow:hidden;cursor:pointer;flex-shrink:0}
-.hex{width:82px;font-size:12px;font-family:'Space Mono',monospace;padding:4px 7px}
-
-/* ── logo (opt-in only) ──────────────────────────────────────────── */
-.logo-up{width:100%;padding:14px;border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;color:rgba(255,255,255,.3);outline:2px dashed var(--bord2);border:none}
-.logo-up:hover{background:rgba(255,255,255,.04);outline-color:rgba(255,255,255,.14)}
-.logo-prev{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.logo-img{width:40px;height:40px;object-fit:contain;border-radius:6px;border:1px solid rgba(255,255,255,.08);background:#fff}
-.logo-rm{width:26px;height:26px;border-radius:5px;border:none;background:rgba(255,68,85,.12);color:var(--danger);display:grid;place-items:center;font-size:16px;flex-shrink:0}
-
-/* ── print DPI ───────────────────────────────────────────────────── */
-.dpi-wrap{padding:12px;border-radius:9px;background:rgba(255,255,255,.018);border:1px solid var(--bord2);margin-bottom:10px}
-.dpi-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(255,255,255,.22);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
-.dpi-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-.dpi-result{padding:7px 10px;border-radius:7px;font-size:11px;font-family:'Space Mono',monospace;line-height:1.5}
-.dpi-result.ok  {background:var(--a10);border:1px solid var(--bord);color:rgba(184,244,0,.7)}
-.dpi-result.warn{background:rgba(255,160,64,.06);border:1px solid rgba(255,160,64,.2);color:rgba(255,160,64,.8)}
-.dpi-result.bad {background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.2);color:rgba(255,68,85,.8)}
-.dpi-result.empty{color:rgba(255,255,255,.2);font-size:10px}
-
-/* ── scan status ─────────────────────────────────────────────────── */
-.scan-box{padding:13px 15px;border-radius:9px;border:1px solid;margin-bottom:10px}
-.scan-box.good   {border-color:rgba(184,244,0,.22);background:rgba(184,244,0,.04)}
-.scan-box.caution{border-color:rgba(255,160,64,.22);background:rgba(255,160,64,.04)}
-.scan-box.bad    {border-color:rgba(255,68,85,.22);background:rgba(255,68,85,.04)}
-.scan-hdr{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.scan-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.scan-title{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px}
-.scan-items{display:flex;flex-direction:column;gap:3px}
-.scan-item{font-size:11px;color:rgba(255,255,255,.36);display:flex;align-items:flex-start;gap:6px;line-height:1.5}
-
-/* ── batch ───────────────────────────────────────────────────────── */
-.batch-drop{width:100%;padding:18px;border-radius:9px;background:rgba(184,244,0,.03);outline:2px dashed rgba(184,244,0,.15);border:none;display:flex;flex-direction:column;align-items:center;gap:5px;color:rgba(184,244,0,.5);cursor:pointer}
-.batch-drop:hover{background:var(--a10);outline-color:rgba(184,244,0,.3)}
-.batch-progress{margin-top:10px;padding:12px;border-radius:9px;background:rgba(255,255,255,.02);border:1px solid var(--bord2)}
-.batch-bar-wrap{height:4px;border-radius:2px;background:rgba(255,255,255,.06);overflow:hidden;margin:7px 0}
-.batch-bar{height:100%;background:var(--a);border-radius:2px;transition:width .15s}
-.batch-txt{font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,.3)}
-.batch-dl{width:100%;margin-top:10px;padding:9px;border-radius:8px;border:none;background:var(--a);color:var(--dark);font-weight:700;font-size:12px;font-family:'Syne',sans-serif}
 
 /* ── preview ─────────────────────────────────────────────────────── */
 .preview-wrap{position:sticky;top:68px}
 .prev-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.prev-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase}
+.prev-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;
+  color:rgba(184,244,0,.38);letter-spacing:3px;text-transform:uppercase}
 
 #qr-mount{
   display:flex;justify-content:center;align-items:center;
-  min-height:280px;border-radius:11px;overflow:hidden;
-  width:min(380px,100%);margin:0 auto 14px;
-  transition:box-shadow .25s,background .25s;
+  min-height:260px;border-radius:12px;overflow:hidden;
+  width:min(360px,100%);margin:0 auto 14px;
+  transition:box-shadow .22s;
   position:relative;background:#fff;
 }
 #qr-mount.empty{background:rgba(255,255,255,.018)!important;outline:2px dashed var(--bord)}
-#qr-mount.pass{box-shadow:0 0 0 2px var(--a),0 0 32px rgba(184,244,0,.10)}
-#qr-mount.fail{box-shadow:0 0 0 2px var(--danger),0 0 32px rgba(255,68,85,.08)}
-#qr-mount canvas{width:100%!important;height:auto!important;display:block}
+#qr-mount.pass{box-shadow:0 0 0 2px var(--a),0 0 28px rgba(184,244,0,.10)}
+#qr-mount.fail{box-shadow:0 0 0 2px var(--danger),0 0 28px rgba(255,68,85,.08)}
+#qr-mount canvas{width:100%!important;height:auto!important;display:block;animation:popIn .18s ease}
 
-.scanline-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:11px}
-.scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--a),transparent);animation:scanline 1.2s ease-in-out infinite;opacity:.7}
+.scanline-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:12px}
+.scanline{position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--a),transparent);
+  animation:scanline 1.1s ease-in-out infinite;opacity:.65}
 
-.empty-hint{text-align:center;color:rgba(184,244,0,.16);pointer-events:none}
-.empty-hint .big{font-size:48px;margin-bottom:10px;filter:grayscale(1)}
+.empty-hint{text-align:center;color:rgba(184,244,0,.14);pointer-events:none}
+.empty-hint .big{font-size:44px;margin-bottom:8px;filter:grayscale(1)}
 .empty-hint .txt{font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px}
 
 /* ── verify badge ────────────────────────────────────────────────── */
 .vbadge{font-size:10px;font-family:'Space Mono',monospace;white-space:nowrap}
 .vbadge.pass{color:var(--a)}
 .vbadge.fail{color:var(--danger)}
-.vbadge.loading,.vbadge.checking{color:rgba(255,255,255,.25)}
+.vbadge.checking{color:rgba(255,255,255,.22)}
 
 /* ── stats ───────────────────────────────────────────────────────── */
 .qr-stats{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
-.stat-chip{padding:3px 8px;border-radius:5px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,.28);display:flex;align-items:center;gap:4px}
-.stat-chip .sv{color:rgba(184,244,0,.7);font-weight:700}
+.stat-chip{padding:3px 8px;border-radius:5px;
+  background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);
+  font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,.28);
+  display:flex;align-items:center;gap:4px}
+.stat-chip .sv{color:rgba(184,244,0,.75);font-weight:700}
 .stat-chip.warn .sv{color:var(--warn)}
 .stat-chip.bad  .sv{color:var(--danger)}
-.stat-chip.iso  .sv{color:var(--a)}
 
 /* ── actions ─────────────────────────────────────────────────────── */
 .dl-row{display:flex;gap:7px;margin-bottom:7px}
-.btn-main{flex:1;padding:10px 0;border-radius:9px;border:none;background:var(--a);color:var(--dark);font-weight:700;font-size:13px;font-family:'Syne',sans-serif}
+.btn-main{flex:1;padding:11px 0;border-radius:9px;border:none;
+  background:var(--a);color:var(--dark);font-weight:700;font-size:13px;font-family:'Syne',sans-serif}
 .btn-main:hover{background:#cbff1a}
-.cp-row{display:flex;gap:7px;margin-bottom:7px}
-.btn-g{flex:1;padding:8px 0;border-radius:9px;border:1px solid var(--bord2);background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:12px;font-weight:600}
+.cp-row{display:flex;gap:7px}
+.btn-g{flex:1;padding:8px 0;border-radius:9px;border:1px solid var(--bord2);
+  background:rgba(255,255,255,.02);color:rgba(255,255,255,.34);font-size:12px;font-weight:600}
 .btn-g.done{background:var(--a10);color:var(--a);border-color:var(--bord)}
-.data-chip{padding:8px 10px;border-radius:7px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.05);font-size:10px;font-family:'Space Mono',monospace;color:rgba(255,255,255,.2);word-break:break-all;max-height:52px;overflow-y:auto;line-height:1.6;margin-bottom:7px}
-.cam-tip{padding:9px 12px;border-radius:8px;border:1px solid var(--bord);background:var(--a10);font-size:11px;color:rgba(184,244,0,.55);font-family:'Space Mono',monospace;line-height:1.6;text-align:center}
+.btn-g:hover:not(.done){border-color:rgba(255,255,255,.14);color:rgba(255,255,255,.6)}
 
 /* ── toasts ──────────────────────────────────────────────────────── */
-#toasts{position:fixed;top:66px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
-.toast{padding:10px 15px;border-radius:10px;font-size:12px;font-weight:600;animation:toastIn .2s ease;display:flex;align-items:center;gap:7px;backdrop-filter:blur(16px);pointer-events:all}
+#toasts{position:fixed;top:66px;right:18px;z-index:9999;
+  display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.toast{padding:10px 15px;border-radius:10px;font-size:12px;font-weight:600;
+  animation:toastIn .2s ease;display:flex;align-items:center;gap:7px;
+  backdrop-filter:blur(16px);pointer-events:all}
 .toast.ok{background:rgba(184,244,0,.13);border:1px solid rgba(184,244,0,.22);color:var(--a)}
 .toast.er{background:rgba(255,68,85,.13);border:1px solid rgba(255,68,85,.22);color:var(--danger)}
 .toast.wn{background:rgba(255,160,64,.13);border:1px solid rgba(255,160,64,.22);color:var(--warn)}
@@ -236,26 +190,37 @@ header{
 <script>
 "use strict";
 /* ══════════════════════════════════════════════════════════════════════
-   QR STUDIO v8 — Black & White first. Battle-tested. Minimal.
+   QR STUDIO v9 — Lightning fast. Minimal. Battle-tested.
 
-   Philosophy:
-   • Default output = ISO/IEC 18004 compliant: black modules, white background,
-     square dots, square finders, proportional quiet zone.
-     Every scanner ever built is optimized for exactly this.
-   • Color mode is opt-in, off by default, clearly warned.
-   • Logo is opt-in, collapsed by default, EC auto-upgraded.
-   • Renderer is 10 lines. Synchronous. No style branches.
-   • Single canvas — display canvas IS verify canvas (B&W = no ambiguity).
-   • ZXing MultiFormatReader + BinaryBitmap — zero PNG round-trip.
-   • qrcode-generator isDark() — the only browser-safe matrix API.
-   • Batch uses identical render path as single — no inconsistency.
+   Architecture:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │  Web Worker (off main thread)                                   │
+   │  • qrcode-generator loaded via importScripts                    │
+   │  • qr.make() + isDark() loop → Uint8Array grid (transferable)   │
+   │  • posts { grid, mc, version } back — zero copy                 │
+   ├─────────────────────────────────────────────────────────────────┤
+   │  Main thread                                                    │
+   │  • Receives grid → pure fillRect() draw — no isDark() here      │
+   │  • jsQR verify (~60KB) on drawn canvas — ~5–15ms                │
+   │  • Fallback: main-thread qrcode-generator if worker fails       │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Libraries:
+   • qrcode-generator@1.4.4 — isDark() API, lives in worker
+   • jsQR@1.4.0              — 60KB, QR-only, replaces 500KB ZXing
+   • No ZXing. No JSZip. No qr-code-styling. No logo. No color mode.
+
+   Output: ISO/IEC 18004 — black on white, square modules,
+   proportional quiet zone. What every bank and airline generates.
 ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Allowed CDN origins ─────────────────────────────────────────── */
-const ALLOWED_ORIGINS = ["https://unpkg.com","https://cdnjs.cloudflare.com"];
+const ALLOWED_ORIGINS = ["https://unpkg.com","https://cdn.jsdelivr.net"];
 function isSafeScriptSrc(src) {
-  try { const u=new URL(src); return ALLOWED_ORIGINS.some(o=>u.origin===new URL(o).origin); }
-  catch { return false; }
+  try {
+    const u = new URL(src);
+    return ALLOWED_ORIGINS.some(o => u.origin === new URL(o).origin);
+  } catch { return false; }
 }
 
 /* ── Script loader ───────────────────────────────────────────────── */
@@ -263,361 +228,409 @@ const _sc = new Map();
 function loadScript(src) {
   if (!isSafeScriptSrc(src)) return Promise.reject(new Error("Blocked: "+src));
   if (_sc.has(src)) return _sc.get(src);
-  const p = new Promise((ok,fail) => {
+  const p = new Promise((ok, fail) => {
     const s = document.createElement("script");
-    s.src=src; s.onload=ok;
-    s.onerror=()=>{ _sc.delete(src); fail(new Error("Load failed: "+src)); };
+    s.src = src; s.onload = ok;
+    s.onerror = () => { _sc.delete(src); fail(new Error("Load failed: "+src)); };
     document.head.appendChild(s);
   });
-  _sc.set(src,p); return p;
+  _sc.set(src, p); return p;
 }
 
-/* ── qrcode-generator: isDark(row,col) ───────────────────────────── */
+/* ── jsQR loader (main thread — verify only) ─────────────────────── */
+let _jsqrP = null;
+function ensureJsQR() {
+  if (!_jsqrP) _jsqrP = loadScript(
+    "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
+  ).then(() => {
+    if (typeof window.jsQR !== "function") throw new Error("jsQR missing");
+    return window.jsQR;
+  }).catch(e => { _jsqrP = null; throw e; });
+  return _jsqrP;
+}
+
+/* ── qrcode-generator (main thread — fallback only) ─────────────── */
 let _qrgP = null;
 function ensureQRG() {
-  if (!_qrgP) _qrgP = loadScript("https://unpkg.com/qrcode-generator@1.4.4/qrcode.js")
-    .then(()=>{ if(typeof window.qrcode!=="function") throw new Error("qrcode-generator missing"); return window.qrcode; });
+  if (!_qrgP) _qrgP = loadScript(
+    "https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"
+  ).then(() => {
+    if (typeof window.qrcode !== "function") throw new Error("qrcode-generator missing");
+    return window.qrcode;
+  }).catch(e => { _qrgP = null; throw e; });
   return _qrgP;
 }
 
-/* ── ZXing: verify only ──────────────────────────────────────────── */
-let _zxP = null;
-function ensureZXing() {
-  if (!_zxP) _zxP = loadScript("https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js")
-    .then(()=>{ if(!window.ZXing) throw new Error("ZXing missing"); return window.ZXing; })
-    .catch(e=>{ _zxP=null; throw e; });
-  return _zxP;
+/* ══════════════════════════════════════════════════════════════════
+   WEB WORKER — inlined as Blob URL, keeps tool single-file.
+   Loads qrcode-generator via importScripts (runs in worker scope).
+   Posts Uint8Array grid as transferable — zero copy.
+══════════════════════════════════════════════════════════════════════ */
+const WORKER_SRC = `
+"use strict";
+let libReady = false;
+let libError = null;
+
+// Load qrcode-generator inside worker
+try {
+  importScripts("https://unpkg.com/qrcode-generator@1.4.4/qrcode.js");
+  if (typeof qrcode !== "function") throw new Error("qrcode not defined after importScripts");
+  libReady = true;
+} catch(e) {
+  libError = e.message;
 }
 
-/* ── JSZip: batch only ───────────────────────────────────────────── */
-let _zipP = null;
-function ensureJSZip() {
-  if (!_zipP) _zipP = loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js")
-    .then(()=>{ if(!window.JSZip) throw new Error("JSZip missing"); return window.JSZip; });
-  return _zipP;
+self.onmessage = function(e) {
+  const { id, payload, ec } = e.data;
+
+  if (!libReady) {
+    self.postMessage({ id, ok: false, error: "Worker lib failed: " + libError });
+    return;
+  }
+
+  try {
+    // typeNumber 0 = auto-detect version
+    const qr = qrcode(0, ec);
+    qr.addData(payload);
+    qr.make();
+
+    const mc      = qr.getModuleCount();
+    const version = (mc - 17) / 4;
+
+    // Build flat Uint8Array grid — 1=dark, 0=light
+    // Transferred as ArrayBuffer (zero copy across thread boundary)
+    const grid = new Uint8Array(mc * mc);
+    for (let r = 0; r < mc; r++)
+      for (let c = 0; c < mc; c++)
+        if (qr.isDark(r, c)) grid[r * mc + c] = 1;
+
+    self.postMessage({ id, ok: true, grid, mc, version }, [grid.buffer]);
+
+  } catch(err) {
+    self.postMessage({ id, ok: false, error: err.message });
+  }
+};
+`;
+
+/* ── Worker lifecycle ────────────────────────────────────────────── */
+let _worker     = null;
+let _workerDead = false;
+// Map of pending request id → { resolve, reject, timer }
+const _pending  = new Map();
+let   _reqId    = 0;
+
+function getWorker() {
+  if (_worker || _workerDead) return _worker;
+  try {
+    const blob = new Blob([WORKER_SRC], { type: "text/javascript" });
+    const url  = URL.createObjectURL(blob);
+    _worker = new Worker(url);
+
+    _worker.onmessage = ({ data }) => {
+      const entry = _pending.get(data.id);
+      if (!entry) return;
+      clearTimeout(entry.timer);
+      _pending.delete(data.id);
+      if (data.ok) entry.resolve(data);
+      else         entry.reject(new Error(data.error || "Worker error"));
+    };
+
+    _worker.onerror = (e) => {
+      // Reject all pending requests and mark worker dead
+      _pending.forEach(({ reject, timer }) => {
+        clearTimeout(timer);
+        reject(new Error("Worker crashed: " + e.message));
+      });
+      _pending.clear();
+      _worker = null;
+      _workerDead = true; // stop retrying — fall back to main thread
+    };
+
+    URL.revokeObjectURL(url); // blob loaded, URL no longer needed
+  } catch(e) {
+    _workerDead = true;
+    _worker = null;
+  }
+  return _worker;
 }
 
-/* ── Warmup: JS prefetch after page load (no preload warnings) ───── */
+function qrViaWorker(payload, ec) {
+  return new Promise((resolve, reject) => {
+    const w = getWorker();
+    if (!w) { reject(new Error("Worker unavailable")); return; }
+
+    const id    = ++_reqId;
+    const timer = setTimeout(() => {
+      if (_pending.has(id)) {
+        _pending.delete(id);
+        reject(new Error("Worker timeout"));
+      }
+    }, 6000);
+
+    _pending.set(id, { resolve, reject, timer });
+    w.postMessage({ id, payload, ec });
+  });
+}
+
+/* Main-thread fallback — identical output, same grid format */
+async function qrFallback(payload, ec) {
+  const qrcGen = await ensureQRG();
+  const qr     = qrcGen(0, ec);
+  qr.addData(payload);
+  qr.make();
+  const mc      = qr.getModuleCount();
+  const version = (mc - 17) / 4;
+  const grid    = new Uint8Array(mc * mc);
+  for (let r = 0; r < mc; r++)
+    for (let c = 0; c < mc; c++)
+      if (qr.isDark(r, c)) grid[r * mc + c] = 1;
+  return { ok: true, grid, mc, version };
+}
+
+/* ── Warmup: spin up worker + warm jsQR after page load ──────────── */
+// Worker importScripts run in background — zero main thread cost
+// jsQR (~60KB) loads in parallel — warm before first keystroke
 window.addEventListener("load", () => {
-  ensureQRG().catch(()=>{});
-  setTimeout(()=>ensureZXing().catch(()=>{}), 1500);
+  getWorker();                        // creates worker, importScripts fires immediately
+  ensureJsQR().catch(() => {});       // warm jsQR
 });
 
 /* ── Toast ───────────────────────────────────────────────────────── */
-function toast(msg, type="ok", ms=2800) {
-  const c=document.getElementById("toasts");
-  const el=document.createElement("div"); el.className="toast "+type;
-  const ico=document.createElement("span"); ico.textContent={ok:"✓",er:"✕",wn:"⚠"}[type]||"•";
-  const tx=document.createElement("span"); tx.textContent=msg;
+function toast(msg, type = "ok", ms = 2800) {
+  const c   = document.getElementById("toasts");
+  const el  = document.createElement("div"); el.className = "toast "+type;
+  const ico = document.createElement("span"); ico.textContent = {ok:"✓",er:"✕",wn:"⚠"}[type]||"•";
+  const tx  = document.createElement("span"); tx.textContent = msg;
   el.appendChild(ico); el.appendChild(tx); c.appendChild(el);
-  setTimeout(()=>{ el.style.cssText="opacity:0;transform:translateX(28px);transition:.18s"; setTimeout(()=>el.remove(),220); },ms);
-}
-
-/* ── Hex sanitizer (used only in color mode) ─────────────────────── */
-function safeHex(val, fallback="#000000") {
-  if (!val) return fallback;
-  let h=val.trim().replace(/^#/,"");
-  if (h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-  return /^[0-9a-fA-F]{6}$/.test(h) ? "#"+h : fallback;
-}
-
-/* ── Contrast ratio (used only in color mode) ────────────────────── */
-function hexLum(hex) {
-  const h=safeHex(hex,"#000000");
-  const r=parseInt(h.slice(1,3),16)/255,g=parseInt(h.slice(3,5),16)/255,b=parseInt(h.slice(5,7),16)/255;
-  const lin=x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);
-  return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);
-}
-function cr(fg,bg) {
-  const l1=hexLum(fg),l2=hexLum(bg);
-  return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
-}
-
-/* ── Image data URI validator ────────────────────────────────────── */
-function isSafeImageDataURI(src) {
-  return typeof src==="string" &&
-    /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(src);
+  setTimeout(() => {
+    el.style.cssText = "opacity:0;transform:translateX(28px);transition:.18s";
+    setTimeout(() => el.remove(), 220);
+  }, ms);
 }
 
 /* ── Field length caps ───────────────────────────────────────────── */
 const MAX_URL   = 2048;
 const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
-const BATCH_MAX_ROWS  = 500;
-const BATCH_MAX_BYTES = 5*1024*1024;
 
 function capField(val, max) {
-  if (typeof val!=="string") return "";
-  const enc=new TextEncoder().encode(val);
-  if (enc.length<=max) return val;
-  return new TextDecoder().decode(enc.slice(0,max));
+  if (typeof val !== "string") return "";
+  const enc = new TextEncoder().encode(val);
+  if (enc.length <= max) return val;
+  return new TextDecoder().decode(enc.slice(0, max));
 }
 
-/* ── QR spec tables ──────────────────────────────────────────────── */
+/* ── QR spec capacity table ──────────────────────────────────────── */
 const QR_CAP = {
   L:[17,32,53,78,106,134,154,192,230,271,321,367,425,458,520,586,644,718,792,858,929,1003,1091,1171,1273,1367,1465,1528,1628,1732,1840,1952,2068,2188,2303,2431,2563,2699,2809,2953],
   M:[14,26,42,62,84,106,122,152,180,213,251,287,331,362,412,450,504,560,624,666,711,779,857,911,997,1059,1125,1190,1264,1370,1452,1538,1628,1722,1809,1911,1989,2099,2213,2331],
   Q:[11,20,32,46,60,74,86,108,130,151,177,203,241,258,292,322,364,394,442,482,509,565,611,661,715,751,805,868,908,982,1030,1112,1168,1228,1283,1351,1423,1499,1579,1663],
   H:[7,14,24,34,44,58,64,84,98,119,137,155,177,194,220,250,280,310,338,382,403,439,461,511,535,593,625,658,698,742,790,842,898,958,983,1051,1093,1139,1219,1273]
 };
-function getQRVersion(byteLen,ec) {
-  const caps=QR_CAP[ec]||QR_CAP.H;
-  for (let i=0;i<caps.length;i++) if(caps[i]>=byteLen) return i+1;
-  return 40;
-}
 function moduleCount(v) { return 4*v+17; }
-function quietZonePx(v,canvasSize) { return Math.ceil(4*(canvasSize/moduleCount(v))); }
 
-/* ── vCard validation ────────────────────────────────────────────── */
+/* ── Input validation ────────────────────────────────────────────── */
 function validateFields(type, fields) {
-  const errs={};
+  const errs = {};
   if (type==="email"||type==="vcard") {
-    const e=(fields.email||"").trim();
-    if (e&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) errs.email="Invalid email format";
+    const e = (fields.email||"").trim();
+    if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) errs.email = "Invalid email format";
   }
   if (type==="url") {
-    const u=(fields.url||"").trim();
-    if (u&&u.length>MAX_URL) errs.url=`URL too long (max ${MAX_URL} chars)`;
-    else if (u&&!/^(https?:\/\/)?[\w\-.]+\.[\w\-.]+/.test(u)) errs.url="Invalid URL format";
+    const u = (fields.url||"").trim();
+    if (u && u.length > MAX_URL)    errs.url = `URL too long (max ${MAX_URL})`;
+    else if (u && !/^(https?:\/\/)?[\w\-.]+\.[\w\-.]+/.test(u)) errs.url = "Invalid URL";
   }
-  if (type==="wifi"&&!(fields.ssid||"").trim()) errs.ssid="SSID required";
-  if (type==="vcard"&&!(fields.firstName||"").trim()&&!(fields.lastName||"").trim())
-    errs.firstName="At least one name required";
+  if (type==="wifi" && !(fields.ssid||"").trim()) errs.ssid = "SSID required";
+  if (type==="vcard" && !(fields.firstName||"").trim() && !(fields.lastName||"").trim())
+    errs.firstName = "At least one name required";
   return errs;
 }
 
 /* ── RFC 6350 escaping ───────────────────────────────────────────── */
-function vcEsc(v)  { return capField(v,MAX_FIELD).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
-function vcTel(v)  { return (v||"").replace(/[^\d+\-().\s]/g,"").trim().slice(0,30); }
-function wfEsc(v)  { return (v||"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
+function vcEsc(v) { return capField(v,MAX_FIELD).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
+function vcTel(v) { return (v||"").replace(/[^\d+\-().\s]/g,"").trim().slice(0,30); }
+function wfEsc(v) { return (v||"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
 
 /* ── Data builder ────────────────────────────────────────────────── */
 function buildData(type, f) {
   switch(type) {
     case "url": {
-      let u=capField(f.url||"",MAX_URL).trim();
-      if (u&&!/^https?:\/\//i.test(u)) u="https://"+u;
+      let u = capField(f.url||"", MAX_URL).trim();
+      if (u && !/^https?:\/\//i.test(u)) u = "https://"+u;
       return u;
     }
-    case "text":  return capField(f.text||"",MAX_TEXT);
+    case "text":  return capField(f.text||"", MAX_TEXT);
     case "email": return `mailto:${(f.email||"").trim()}?subject=${encodeURIComponent(capField(f.subject||"",200))}&body=${encodeURIComponent(capField(f.body||"",1000))}`;
     case "sms":   return `sms:${vcTel(f.phone)}${f.message?`?body=${encodeURIComponent(capField(f.message||"",160))}`:""}`; 
     case "phone": return `tel:${vcTel(f.phone)}`;
     case "wifi":  return `WIFI:T:${f.security||"WPA"};S:${wfEsc(capField(f.ssid||"",64))};P:${wfEsc(capField(f.password||"",64))};;`;
     case "vcard": {
-      const fn=[f.firstName,f.lastName].filter(Boolean).map(vcEsc).join(" ");
-      return ["BEGIN:VCARD","VERSION:3.0",
-        `FN:${fn}`,`N:${vcEsc(f.lastName||"")};${vcEsc(f.firstName||"")};;;`,
-        `ORG:${vcEsc(f.org||"")}`,`TEL:${vcTel(f.phone)}`,
+      const fn = [f.firstName,f.lastName].filter(Boolean).map(vcEsc).join(" ");
+      return [
+        "BEGIN:VCARD","VERSION:3.0",
+        `FN:${fn}`,
+        `N:${vcEsc(f.lastName||"")};${vcEsc(f.firstName||"")};;;`,
+        `ORG:${vcEsc(f.org||"")}`,
+        `TEL:${vcTel(f.phone)}`,
         `EMAIL:${(f.email||"").trim().slice(0,254)}`,
         `URL:${(f.website||"").trim().slice(0,MAX_URL)}`,
-        `ADR:;;${vcEsc(f.address||"")};;;;`,"END:VCARD"
+        `ADR:;;${vcEsc(f.address||"")};;;;`,
+        "END:VCARD"
       ].join("\n");
     }
     default: return "";
   }
 }
 
-/* ── Print DPI calculator ────────────────────────────────────────── */
-function calcPrint(ver,printIn,dpi) {
-  if (!ver||!printIn||!dpi) return null;
-  const mmPerMod=(printIn*25.4)/moduleCount(ver);
-  if (mmPerMod<0.25) return {level:"bad",  msg:`${mmPerMod.toFixed(2)}mm/module — below ISO min (0.25mm)`};
-  if (mmPerMod<0.33) return {level:"warn", msg:`${mmPerMod.toFixed(2)}mm/module — marginal for phone cameras`};
-  return {level:"ok",msg:`${mmPerMod.toFixed(2)}mm/module — readable ✓`};
-}
-
-/* ── Scan status ─────────────────────────────────────────────────── */
-function scanStatus(ecLevel,logoSize,byteLen,hasMargin,ver,colorMode,fgColor,bgColor) {
-  const reasons=[]; let bad=0,caution=0;
-  // Color mode contrast check (only relevant when color is enabled)
-  if (colorMode) {
-    const ratio=cr(fgColor,bgColor);
-    if (ratio<2.5) { bad++;    reasons.push({sev:"bad",    msg:`Contrast ${ratio.toFixed(1)}:1 — too low for phone cameras`}); }
-    else if(ratio<4){ caution++; reasons.push({sev:"caution",msg:`Contrast ${ratio.toFixed(1)}:1 — may fail in poor lighting`}); }
-  }
-  if (logoSize>0&&ecLevel==="L") { bad++;    reasons.push({sev:"bad",    msg:"Logo with L correction — unreadable, upgrade to H"}); }
-  else if(logoSize>0&&ecLevel==="M") { caution++; reasons.push({sev:"caution",msg:"Logo with M correction — risky, use Q or H"}); }
-  if (logoSize>30)  { caution++; reasons.push({sev:"caution",msg:"Logo >30% — data modules may be obscured"}); }
-  if (ver>25)       { bad++;    reasons.push({sev:"bad",    msg:`v${ver} QR — too dense for most phone cameras`}); }
-  else if(ver>15)   { caution++; reasons.push({sev:"caution",msg:`v${ver} QR — dense, test on real phones`}); }
-  if (byteLen>300)  { caution++; reasons.push({sev:"caution",msg:"Long payload — test on multiple phones"}); }
-  if (!hasMargin)   { bad++;    reasons.push({sev:"bad",    msg:"No quiet zone — cameras need white border to locate QR"}); }
-  const level=bad>0?"bad":caution>0?"caution":"good";
-  return {level,label:{good:"Camera Ready",caution:"Some Concerns",bad:"Will Likely Fail"}[level],reasons};
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   RENDERER v8 — 10 lines. Synchronous. No branches. Battle-tested.
-
-   Default: black on white, square modules, square finders.
-   The exact output a bank, airline, or payment terminal generates.
-   Color mode passes custom fg/bg — same draw code, different colors.
-═══════════════════════════════════════════════════════════════════ */
-function renderQR(qr, opts) {
-  // opts: { canvasSize, fg, bg, hasMargin, logoSrc, logoSize }
-  const mc      = qr.getModuleCount();
-  const qzMods  = opts.hasMargin ? 4 : 0;
-  const modSz   = opts.canvasSize / (mc + qzMods*2);
-  const offset  = qzMods * modSz;
+/* ══════════════════════════════════════════════════════════════════
+   RENDERER — draws from Uint8Array grid (no isDark() on main thread)
+   Pure fillRect loop. Synchronous. Zero style branches.
+   Black on white — ISO/IEC 18004 compliant by default.
+══════════════════════════════════════════════════════════════════════ */
+function drawGrid(grid, mc, canvasSize, hasMargin) {
+  const qzMods = hasMargin ? 4 : 0;
+  const modSz  = canvasSize / (mc + qzMods * 2);
+  const offset = qzMods * modSz;
 
   const canvas  = document.createElement("canvas");
-  canvas.width  = opts.canvasSize;
-  canvas.height = opts.canvasSize;
+  canvas.width  = canvasSize;
+  canvas.height = canvasSize;
   const ctx     = canvas.getContext("2d", { willReadFrequently: true });
 
-  // Background
-  ctx.fillStyle = opts.bg;
-  ctx.fillRect(0, 0, opts.canvasSize, opts.canvasSize);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasSize, canvasSize);
 
-  // Modules — single fillRect per dark module, no style branches
-  ctx.fillStyle = opts.fg;
-  for (let row=0; row<mc; row++)
-    for (let col=0; col<mc; col++)
-      if (qr.isDark(row,col))
-        ctx.fillRect(offset+col*modSz, offset+row*modSz, modSz, modSz);
+  ctx.fillStyle = "#000000";
+  for (let r = 0; r < mc; r++)
+    for (let c = 0; c < mc; c++)
+      if (grid[r * mc + c])
+        ctx.fillRect(
+          offset + c * modSz,
+          offset + r * modSz,
+          modSz, modSz
+        );
 
+  canvas.style.width  = "100%";
+  canvas.style.height = "auto";
   return canvas;
 }
 
-/* Async wrapper adds logo overlay if present */
-async function renderQRAsync(qr, opts) {
-  const canvas = renderQR(qr, opts);
-  if (opts.logoSrc && isSafeImageDataURI(opts.logoSrc)) {
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    await new Promise(resolve => {
-      const img = new Image();
-      img.onload = () => {
-        const lsz = Math.floor(opts.canvasSize*(opts.logoSize/100));
-        const lx  = (opts.canvasSize-lsz)/2;
-        const ly  = (opts.canvasSize-lsz)/2;
-        const pad = lsz*0.1;
-        ctx.fillStyle = opts.bg;
-        ctx.fillRect(lx-pad, ly-pad, lsz+pad*2, lsz+pad*2);
-        ctx.drawImage(img, lx, ly, lsz, lsz);
-        resolve();
-      };
-      img.onerror = resolve;
-      img.src = opts.logoSrc;
+/* ══════════════════════════════════════════════════════════════════
+   jsQR VERIFY — ~5–15ms on B&W canvas
+   Purpose-built JS decoder, 60KB, no Java port overhead.
+   Runs on main thread after draw — canvas pixels are already there.
+══════════════════════════════════════════════════════════════════════ */
+async function verifyWithJsQR(expectedData, canvas) {
+  update({ verifyStatus: "checking" });
+  try {
+    const jsQR  = await ensureJsQR();
+    const ctx   = canvas.getContext("2d", { willReadFrequently: true });
+    const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const res   = jsQR(idata.data, idata.width, idata.height, {
+      inversionAttempts: "dontInvert" // B&W default — skip inversion, faster
     });
+    update({ verifyStatus: res?.data === expectedData ? "pass" : "fail" });
+    if (res && res.data !== expectedData)
+      console.warn("[QR v9] Mismatch\nExpected:", expectedData, "\nDecoded:", res.data);
+  } catch {
+    update({ verifyStatus: null });
   }
-  return canvas;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   QRController v8
-═══════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════
+   QRController v9
+══════════════════════════════════════════════════════════════════════ */
 const QRC = (() => {
   let _lastSig = null;
 
-  function clampEC(ec, logoSrc, logoSize) {
-    if (!logoSrc||!logoSize) return ec;
-    if (ec==="L") return "H";
-    if (ec==="M"&&logoSize>15) return "H";
-    if (ec==="M") return "Q";
+  function clampEC(ec, hasLogo) {
+    if (!hasLogo) return ec;  // no logo in v9 — always returns ec as-is
     return ec;
   }
+
   function mount() { return document.getElementById("qr-mount"); }
-  function sig(o)  { return [o.data,o.fg,o.bg,o.ecLevel,o.logoSrc?"y":"n",o.logoSize,o.hasMargin].join("|"); }
+
+  function sig(data, ec, hasMargin) {
+    return [data, ec, hasMargin].join("|");
+  }
 
   async function generate(opts) {
-    const el=mount(); if(!el) return;
-    const effEC = clampEC(opts.ecLevel, opts.logoSrc, opts.logoSize);
-    const s     = sig({...opts, ecLevel:effEC});
-    if (s===_lastSig) return;
+    const el = mount(); if (!el) return;
+    const s  = sig(opts.data, opts.ecLevel, opts.hasMargin);
+    if (s === _lastSig) return;
     _lastSig = s;
 
-    update({verifyStatus:"checking"});
+    update({ verifyStatus: "checking", hasQR: false });
+
+    // Show scanline immediately
+    syncMount();
 
     try {
-      const qrcGen = await ensureQRG();
-      const qr     = qrcGen(0, effEC); // 0 = auto version
-      qr.addData(opts.data);
-      qr.make();
+      // Try worker first — falls back to main thread silently
+      let result;
+      try {
+        result = await qrViaWorker(opts.data, opts.ecLevel);
+      } catch {
+        result = await qrFallback(opts.data, opts.ecLevel);
+      }
 
-      const version = (qr.getModuleCount()-17)/4;
-      update({qrVersion:version});
+      if (!result.ok) throw new Error(result.error);
 
-      // HiDPI: render at devicePixelRatio, capped at 3×
-      const dpr        = Math.min(window.devicePixelRatio||1, 3);
-      const canvasSize = Math.round(Math.max(380, 380*dpr));
+      const { grid, mc, version } = result;
+      update({ qrVersion: version });
 
-      // Single canvas — display = verify (B&W default is always clean for ZXing)
-      const canvas = await renderQRAsync(qr, {
-        canvasSize, hasMargin:opts.hasMargin,
-        fg: opts.fg, bg: opts.bg,
-        logoSrc:opts.logoSrc, logoSize:opts.logoSize
-      });
-      canvas.style.width  = "100%";
-      canvas.style.height = "auto";
+      // HiDPI — render at device pixel ratio, capped at 3×
+      const dpr        = Math.min(window.devicePixelRatio || 1, 3);
+      const canvasSize = Math.round(Math.max(360, 360 * dpr));
+
+      const canvas = drawGrid(grid, mc, canvasSize, opts.hasMargin);
 
       el.innerHTML = "";
       el.appendChild(canvas);
-      update({hasQR:true});
+      update({ hasQR: true });
 
-      // Verify on the same canvas — B&W default is ideal for ZXing
-      autoVerify(opts.data, canvas);
+      // Verify — fast jsQR on the drawn canvas
+      verifyWithJsQR(opts.data, canvas);
 
     } catch(e) {
-      toast("Generation failed: "+e.message,"er");
-      update({verifyStatus:null,hasQR:false,qrVersion:1});
+      toast("Generation failed: " + e.message, "er");
+      update({ verifyStatus: null, hasQR: false, qrVersion: 1 });
     }
   }
 
   function clear() {
-    const el=mount(); if(!el) return;
-    _lastSig=null; el.innerHTML="";
-    const hint=document.createElement("div"); hint.className="empty-hint";
-    const big=document.createElement("div"); big.className="big"; big.textContent="▣";
-    const txt=document.createElement("div"); txt.className="txt"; txt.textContent="Enter data to generate";
+    const el = mount(); if (!el) return;
+    _lastSig = null;
+    el.innerHTML = "";
+    const hint = document.createElement("div"); hint.className = "empty-hint";
+    const big  = document.createElement("div"); big.className  = "big"; big.textContent = "▣";
+    const txt  = document.createElement("div"); txt.className  = "txt"; txt.textContent = "Enter data to generate";
     hint.appendChild(big); hint.appendChild(txt); el.appendChild(hint);
-    update({verifyStatus:null,hasQR:false,qrVersion:1});
+    update({ verifyStatus: null, hasQR: false, qrVersion: 1 });
   }
 
-  function getClampEC(ec,ls,lsz) { return clampEC(ec,ls,lsz); }
-  return {generate,clear,clampEC:getClampEC};
+  return { generate, clear };
 })();
-
-/* ── autoVerify: zero-copy BinaryBitmap path ─────────────────────── */
-let _zxReader = null;
-async function autoVerify(expectedData, canvas) {
-  try {
-    update({verifyStatus:"loading"});
-    const ZXing = await ensureZXing();
-    update({verifyStatus:"checking"});
-    if (!_zxReader) {
-      const hints=new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-      _zxReader=new ZXing.MultiFormatReader();
-      _zxReader.setHints(hints);
-    }
-    const lum  = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-    const bmp  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-    let decoded=null;
-    try { decoded=_zxReader.decode(bmp)?.getText()??null; } catch{decoded=null;}
-    const passed=decoded===expectedData;
-    update({verifyStatus:passed?"pass":"fail"});
-    if (!passed&&decoded) console.warn("[QR v8] Mismatch\nExpected:",expectedData,"\nDecoded:",decoded);
-  } catch { update({verifyStatus:null}); }
-}
 
 /* ── Download ────────────────────────────────────────────────────── */
 function dlQR() {
-  const c=document.getElementById("qr-mount")?.querySelector("canvas");
+  const c = document.getElementById("qr-mount")?.querySelector("canvas");
   if (!c) { toast("Generate a QR first","wn"); return; }
-  const a=document.createElement("a"); a.href=c.toDataURL("image/png"); a.download="qrcode.png"; a.click();
+  const a = document.createElement("a");
+  a.href = c.toDataURL("image/png"); a.download = "qrcode.png"; a.click();
 }
 
 /* ── Copy image ──────────────────────────────────────────────────── */
 async function copyImg() {
-  const c=document.getElementById("qr-mount")?.querySelector("canvas");
+  const c = document.getElementById("qr-mount")?.querySelector("canvas");
   if (!c) { toast("Generate a QR first","wn"); return; }
-  c.toBlob(async blob=>{
+  c.toBlob(async blob => {
     try {
-      await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
-      update({imgCopied:true}); setTimeout(()=>update({imgCopied:false}),2000);
-      toast("Image copied","ok");
+      await navigator.clipboard.write([new ClipboardItem({"image/png": blob})]);
+      update({ imgCopied: true });
+      setTimeout(() => update({ imgCopied: false }), 2000);
+      toast("Image copied", "ok");
     } catch { toast("Clipboard unavailable — use Download","wn"); }
   });
 }
@@ -626,238 +639,214 @@ async function copyImg() {
 async function copyData(raw) {
   try {
     await navigator.clipboard.writeText(raw);
-    update({dataCopied:true}); setTimeout(()=>update({dataCopied:false}),2000);
+    update({ dataCopied: true });
+    setTimeout(() => update({ dataCopied: false }), 2000);
     toast("Copied","ok");
   } catch { toast("Clipboard write failed","er"); }
 }
 
-/* ── Batch: same render path, square B&W ─────────────────────────── */
-async function runBatch(csvText) {
-  if (new TextEncoder().encode(csvText).length>BATCH_MAX_BYTES){toast("CSV too large (max 5MB)","wn");return;}
-  const lines=csvText.trim().split(/\r?\n/).filter(l=>l.trim());
-  if (!lines.length){toast("CSV is empty","wn");return;}
-  if (lines.length>BATCH_MAX_ROWS){toast(`Too many rows (max ${BATCH_MAX_ROWS})`,"wn");return;}
-
-  update({batchProgress:{done:0,total:lines.length},batchBlob:null});
-  try {
-    const [qrcGen,JSZip]=await Promise.all([ensureQRG(),ensureJSZip()]);
-    const zip=new JSZip();
-    for (let i=0;i<lines.length;i++) {
-      const row=lines[i].split(",");
-      const label=(row[0]||"").trim().replace(/[^\w\-]/g,"_").slice(0,64)||`qr_${i+1}`;
-      let data=capField((row[1]||row[0]||"").trim(),MAX_URL);
-      if (!data){update({batchProgress:{done:i+1,total:lines.length},batchBlob:null});continue;}
-      if (!/^https?:\/\//i.test(data)&&/\./.test(data)) data="https://"+data;
-
-      const qr=qrcGen(0,S.ecLevel);
-      qr.addData(data); qr.make();
-
-      // Always B&W square in batch — maximum compatibility
-      const canvas=renderQR(qr,{
-        canvasSize:600, hasMargin:S.hasMargin,
-        fg:"#000000", bg:"#ffffff",
-        logoSrc:null, logoSize:0
-      });
-      const blob=await new Promise(res=>canvas.toBlob(res,"image/png"));
-      zip.file(label+".png",blob);
-      update({batchProgress:{done:i+1,total:lines.length},batchBlob:null});
-      await new Promise(r=>setTimeout(r,0));
-    }
-    const zipBlob=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
-    update({batchProgress:null,batchBlob:zipBlob});
-    toast(`${lines.length} QR codes ready`,"ok");
-  } catch(e) {
-    toast("Batch failed: "+e.message,"er");
-    update({batchProgress:null});
-  }
-}
-
-function downloadBatch() {
-  if (!S.batchBlob) return;
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(S.batchBlob); a.download="qrcodes.zip"; a.click();
-}
-
-/* ═══════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════
    CONSTANTS
-═══════════════════════════════════════════════════════════════════ */
-const QR_TYPES=[
-  {id:"url",  label:"URL",   icon:"🔗"},{id:"text", label:"Text",  icon:"📝"},
-  {id:"email",label:"Email", icon:"✉️"},{id:"sms",  label:"SMS",   icon:"💬"},
-  {id:"phone",label:"Phone", icon:"📞"},{id:"wifi", label:"WiFi",  icon:"📶"},
-  {id:"vcard",label:"vCard", icon:"👤"},
+══════════════════════════════════════════════════════════════════════ */
+const QR_TYPES = [
+  {id:"url",   label:"URL",   icon:"🔗"},
+  {id:"text",  label:"Text",  icon:"📝"},
+  {id:"email", label:"Email", icon:"✉️"},
+  {id:"sms",   label:"SMS",   icon:"💬"},
+  {id:"phone", label:"Phone", icon:"📞"},
+  {id:"wifi",  label:"WiFi",  icon:"📶"},
+  {id:"vcard", label:"vCard", icon:"👤"},
 ];
-const EC_LEVELS=["L","M","Q","H"];
-const KNOWN_TYPES=new Set(QR_TYPES.map(t=>t.id));
+const EC_LEVELS   = ["L","M","Q","H"];
+const KNOWN_TYPES = new Set(QR_TYPES.map(t => t.id));
 
-/* ═══════════════════════════════════════════════════════════════════
-   localStorage
-═══════════════════════════════════════════════════════════════════ */
-function lsGet(k,fb) {
+/* ══════════════════════════════════════════════════════════════════
+   localStorage — type-safe, key-scoped
+══════════════════════════════════════════════════════════════════════ */
+function lsGet(k, fb) {
   try {
-    const v=localStorage.getItem(k); if(!v) return fb;
-    const p=JSON.parse(v);
-    if (typeof p!=="object"||p===null||Array.isArray(p)) return fb;
+    const v = localStorage.getItem(k); if (!v) return fb;
+    const p = JSON.parse(v);
+    if (typeof p !== "object" || p === null || Array.isArray(p)) return fb;
     return p;
   } catch { return fb; }
 }
-function lsSet(k,v) {
-  try { localStorage.setItem(k,JSON.stringify(v)); }
-  catch(e){ if(e.name==="QuotaExceededError"||e.code===22) toast("Storage full","wn"); }
+function lsSet(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); }
+  catch(e) { if (e.name==="QuotaExceededError"||e.code===22) toast("Storage full","wn"); }
 }
-function lsSetFields(type,fields) {
+function lsSetFields(type, fields) {
   if (!KNOWN_TYPES.has(type)) return;
-  lsSet("qrs_fields_"+type,fields);
+  lsSet("qrs_fields_"+type, fields);
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   STATE — minimal shape
-═══════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════
+   STATE — 9 keys. Nothing more.
+══════════════════════════════════════════════════════════════════════ */
 const S = {
-  qrType:    "url",
-  fields:    lsGet("qrs_fields_url",{}),
-  fieldErrs: {},
-  ecLevel:   "H",
-  hasMargin: true,
-  // Color mode — opt-in, off by default
-  colorMode: false,
-  fgColor:   "#000000",
-  bgColor:   "#ffffff",
-  // Logo — opt-in, collapsed by default
-  logoOpen:  false,
-  logoSrc:   null,
-  logoSize:  20,
-  // Print DPI
-  printSize: 2,
-  printDPI:  300,
-  // Advanced disclosure
-  advOpen:   false,
-  // Batch
-  batchOpen: false,
-  batchProgress: null,
-  batchBlob: null,
-  // Status
+  qrType:       "url",
+  fields:       lsGet("qrs_fields_url", {}),
+  fieldErrs:    {},
+  ecLevel:      "H",
+  hasMargin:    true,
   verifyStatus: null,
-  hasQR:     false,
-  qrVersion: 1,
-  imgCopied: false,
-  dataCopied:false,
+  hasQR:        false,
+  qrVersion:    1,
+  imgCopied:    false,
+  dataCopied:   false,
 };
 
-let _raf=false;
-function update(patch,afterRender) {
-  Object.assign(S,typeof patch==="function"?patch(S):patch);
-  if (!_raf){ _raf=true; requestAnimationFrame(()=>{ render(); _raf=false; if(afterRender)afterRender(); }); }
+let _raf = false;
+function update(patch, afterRender) {
+  Object.assign(S, typeof patch === "function" ? patch(S) : patch);
+  if (!_raf) {
+    _raf = true;
+    requestAnimationFrame(() => {
+      render();
+      _raf = false;
+      if (afterRender) afterRender();
+    });
+  }
 }
 
-/* ── h() ─────────────────────────────────────────────────────────── */
-function h(tag,attrs={},...kids) {
-  const el=document.createElement(tag);
+/* ── h() — zero innerHTML, safe DOM builder ──────────────────────── */
+function h(tag, attrs={}, ...kids) {
+  const el = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
-    if (v===null||v===undefined||v===false) continue;
-    if (k==="class")       el.className=v;
-    else if (k==="style"&&typeof v==="object") Object.assign(el.style,v);
-    else if (k==="value")  el.value=v;
-    else if (k==="checked") el.checked=!!v;
-    else if (k==="selected") el.selected=!!v;
-    else if (k==="disabled") el.disabled=!!v;
-    else if (k.startsWith("on")&&typeof v==="function") el.addEventListener(k.slice(2).toLowerCase(),v);
-    else el.setAttribute(k,v);
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class")                          el.className = v;
+    else if (k === "style" && typeof v==="object") Object.assign(el.style, v);
+    else if (k === "value")                     el.value = v;
+    else if (k === "checked")                   el.checked = !!v;
+    else if (k === "selected")                  el.selected = !!v;
+    else if (k === "disabled")                  el.disabled = !!v;
+    else if (k.startsWith("on") && typeof v==="function")
+      el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
   }
   for (const c of kids.flat(Infinity)) {
-    if (c==null||c===false||c===true||c===undefined) continue;
-    if (typeof c==="string"||typeof c==="number") el.appendChild(document.createTextNode(String(c)));
+    if (c == null || c === false || c === true) continue;
+    if (typeof c === "string" || typeof c === "number")
+      el.appendChild(document.createTextNode(String(c)));
     else if (c instanceof Node) el.appendChild(c);
   }
   return el;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   PERSISTENT DOM
-═══════════════════════════════════════════════════════════════════ */
-const QR_MOUNT=(()=>{
-  const el=document.createElement("div"); el.id="qr-mount"; el.className="qr-mount empty";
-  const hint=document.createElement("div"); hint.className="empty-hint";
-  const big=document.createElement("div"); big.className="big"; big.textContent="▣";
-  const txt=document.createElement("div"); txt.className="txt"; txt.textContent="Enter data to generate";
+/* ══════════════════════════════════════════════════════════════════
+   PERSISTENT DOM — never replaced by render()
+══════════════════════════════════════════════════════════════════════ */
+const QR_MOUNT = (() => {
+  const el   = document.createElement("div"); el.id = "qr-mount"; el.className = "qr-mount empty";
+  const hint = document.createElement("div"); hint.className = "empty-hint";
+  const big  = document.createElement("div"); big.className  = "big"; big.textContent = "▣";
+  const txt  = document.createElement("div"); txt.className  = "txt"; txt.textContent = "Enter data to generate";
   hint.appendChild(big); hint.appendChild(txt); el.appendChild(hint);
   return el;
 })();
 
-const FORM_EL=document.createElement("div"); FORM_EL.id="form-container";
+const FORM_EL = document.createElement("div"); FORM_EL.id = "form-container";
 
-/* ═══════════════════════════════════════════════════════════════════
-   FORM PATCHING — cursor-safe in-place updates
-═══════════════════════════════════════════════════════════════════ */
-function patchInput(container,key,label,placeholder,type="text") {
-  let wrap=container.querySelector(`[data-key="${key}"]`);
+/* ══════════════════════════════════════════════════════════════════
+   FORM PATCHING — cursor-safe, in-place updates, no focus loss
+══════════════════════════════════════════════════════════════════════ */
+function patchInput(container, key, label, placeholder, type="text") {
+  let wrap = container.querySelector(`[data-key="${key}"]`);
   if (!wrap) {
-    wrap=document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
-    const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
-    const inp=document.createElement("input"); inp.type=type; inp.placeholder=placeholder;
-    const err=document.createElement("div"); err.className="fld-err";
-    inp.addEventListener("input",e=>{
-      const nf={...S.fields,[key]:e.target.value};
-      const errs=validateFields(S.qrType,nf);
-      update({fields:nf,fieldErrs:errs}); lsSetFields(S.qrType,nf); scheduleQR(nf);
+    wrap = document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
+    const lbl = document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
+    const inp = document.createElement("input"); inp.type=type; inp.placeholder=placeholder;
+    const err = document.createElement("div"); err.className="fld-err";
+    inp.addEventListener("input", e => {
+      const nf = {...S.fields, [key]: e.target.value};
+      const errs = validateFields(S.qrType, nf);
+      update({fields:nf, fieldErrs:errs});
+      lsSetFields(S.qrType, nf);
+      scheduleQR(nf);
     });
     wrap.appendChild(lbl); wrap.appendChild(inp); wrap.appendChild(err);
     container.appendChild(wrap);
   }
-  const inp=wrap.querySelector("input"); const err=wrap.querySelector(".fld-err");
-  if (document.activeElement!==inp&&inp.value!==(S.fields[key]||"")) inp.value=S.fields[key]||"";
-  inp.type=type; inp.placeholder=placeholder;
-  wrap.querySelector(".lbl").textContent=label;
-  const msg=S.fieldErrs[key];
-  if (msg){inp.classList.add("err");err.textContent=msg;err.classList.add("show");}
-  else    {inp.classList.remove("err");err.textContent="";err.classList.remove("show");}
+  const inp = wrap.querySelector("input");
+  const err = wrap.querySelector(".fld-err");
+  if (document.activeElement !== inp && inp.value !== (S.fields[key]||""))
+    inp.value = S.fields[key]||"";
+  inp.type = type; inp.placeholder = placeholder;
+  wrap.querySelector(".lbl").textContent = label;
+  const msg = S.fieldErrs[key];
+  if (msg) { inp.classList.add("err"); err.textContent=msg; err.classList.add("show"); }
+  else     { inp.classList.remove("err"); err.textContent=""; err.classList.remove("show"); }
 }
 
-function patchTextarea(container,key,label,placeholder) {
-  let wrap=container.querySelector(`[data-key="${key}"]`);
+function patchTextarea(container, key, label, placeholder) {
+  let wrap = container.querySelector(`[data-key="${key}"]`);
   if (!wrap) {
-    wrap=document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
-    const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
-    const ta=document.createElement("textarea"); ta.placeholder=placeholder;
-    ta.addEventListener("input",e=>{
-      const nf={...S.fields,[key]:e.target.value};
-      update({fields:nf}); lsSetFields(S.qrType,nf); scheduleQR(nf);
+    wrap = document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
+    const lbl = document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
+    const ta  = document.createElement("textarea"); ta.placeholder=placeholder;
+    ta.addEventListener("input", e => {
+      const nf = {...S.fields, [key]: e.target.value};
+      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR(nf);
     });
     wrap.appendChild(lbl); wrap.appendChild(ta); container.appendChild(wrap);
   }
-  const ta=wrap.querySelector("textarea");
-  if (document.activeElement!==ta&&ta.value!==(S.fields[key]||"")) ta.value=S.fields[key]||"";
-  ta.placeholder=placeholder;
+  const ta = wrap.querySelector("textarea");
+  if (document.activeElement !== ta && ta.value !== (S.fields[key]||""))
+    ta.value = S.fields[key]||"";
+  ta.placeholder = placeholder;
 }
 
-function patchSelect(container,key,label,options) {
-  let wrap=container.querySelector(`[data-key="${key}"]`);
+function patchSelect(container, key, label, options) {
+  let wrap = container.querySelector(`[data-key="${key}"]`);
   if (!wrap) {
-    wrap=document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
-    const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
-    const sel=document.createElement("select");
-    options.forEach(o=>{const op=document.createElement("option");op.value=o;op.textContent=o;sel.appendChild(op);});
-    sel.addEventListener("change",e=>{const nf={...S.fields,[key]:e.target.value};update({fields:nf});lsSetFields(S.qrType,nf);scheduleQR(nf);});
+    wrap = document.createElement("div"); wrap.className="fld"; wrap.setAttribute("data-key",key);
+    const lbl = document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
+    const sel = document.createElement("select");
+    options.forEach(o => {
+      const op = document.createElement("option"); op.value=o; op.textContent=o;
+      sel.appendChild(op);
+    });
+    sel.addEventListener("change", e => {
+      const nf = {...S.fields, [key]: e.target.value};
+      update({fields:nf}); lsSetFields(S.qrType, nf); scheduleQR(nf);
+    });
     wrap.appendChild(lbl); wrap.appendChild(sel); container.appendChild(wrap);
   }
-  wrap.querySelector("select").value=S.fields[key]||options[0];
+  wrap.querySelector("select").value = S.fields[key]||options[0];
 }
 
 function buildForm(container) {
-  const needed=getNeededKeys(S.qrType);
-  [...container.querySelectorAll("[data-key]")].forEach(el=>{if(!needed.includes(el.dataset.key))el.remove();});
-  if (S.qrType!=="vcard"){const tc=container.querySelector(".two");if(tc)tc.remove();}
-  switch(S.qrType){
-    case"url":   patchInput(container,"url","Website URL","https://example.com","url"); break;
-    case"text":  patchTextarea(container,"text","Text Content","Any text, code, message…"); break;
-    case"email": patchInput(container,"email","Email","you@example.com","email"); patchInput(container,"subject","Subject","Subject line"); patchTextarea(container,"body","Body","Message…"); break;
-    case"sms":   patchInput(container,"phone","Phone Number","+1 555 000 0000","tel"); patchTextarea(container,"message","Message","SMS body…"); break;
-    case"phone": patchInput(container,"phone","Phone Number","+1 555 000 0000","tel"); break;
-    case"wifi":  patchInput(container,"ssid","Network SSID","MyWiFiNetwork"); patchInput(container,"password","Password","WiFi password","password"); patchSelect(container,"security","Security",["WPA","WPA2","WEP","None"]); break;
-    case"vcard": {
-      let tc=container.querySelector(".two");
-      if(!tc){tc=document.createElement("div");tc.className="two";container.insertBefore(tc,container.firstChild);}
-      [...tc.querySelectorAll("[data-key]")].forEach(el=>{if(!["firstName","lastName"].includes(el.dataset.key))el.remove();});
+  const needed = getNeededKeys(S.qrType);
+  [...container.querySelectorAll("[data-key]")].forEach(el => {
+    if (!needed.includes(el.dataset.key)) el.remove();
+  });
+  if (S.qrType !== "vcard") {
+    const tc = container.querySelector(".two"); if (tc) tc.remove();
+  }
+  switch(S.qrType) {
+    case "url":   patchInput(container,"url","Website URL","https://example.com","url"); break;
+    case "text":  patchTextarea(container,"text","Text Content","Any text, code, message…"); break;
+    case "email":
+      patchInput(container,"email","Email","you@example.com","email");
+      patchInput(container,"subject","Subject","Subject line");
+      patchTextarea(container,"body","Body","Message…"); break;
+    case "sms":
+      patchInput(container,"phone","Phone Number","+1 555 000 0000","tel");
+      patchTextarea(container,"message","Message","SMS body…"); break;
+    case "phone": patchInput(container,"phone","Phone Number","+1 555 000 0000","tel"); break;
+    case "wifi":
+      patchInput(container,"ssid","Network SSID","MyWiFiNetwork");
+      patchInput(container,"password","Password","WiFi password","password");
+      patchSelect(container,"security","Security",["WPA","WPA2","WEP","None"]); break;
+    case "vcard": {
+      let tc = container.querySelector(".two");
+      if (!tc) {
+        tc = document.createElement("div"); tc.className="two";
+        container.insertBefore(tc, container.firstChild);
+      }
+      [...tc.querySelectorAll("[data-key]")].forEach(el => {
+        if (!["firstName","lastName"].includes(el.dataset.key)) el.remove();
+      });
       patchInput(tc,"firstName","First Name","John");
       patchInput(tc,"lastName","Last Name","Doe");
       patchInput(container,"org","Organization","Company Name");
@@ -872,336 +861,148 @@ function buildForm(container) {
 
 function getNeededKeys(type) {
   return {
-    url:["url"],text:["text"],email:["email","subject","body"],sms:["phone","message"],
-    phone:["phone"],wifi:["ssid","password","security"],
-    vcard:["firstName","lastName","org","phone","email","website","address"]
+    url:   ["url"],
+    text:  ["text"],
+    email: ["email","subject","body"],
+    sms:   ["phone","message"],
+    phone: ["phone"],
+    wifi:  ["ssid","password","security"],
+    vcard: ["firstName","lastName","org","phone","email","website","address"]
   }[type]||[];
 }
 
-/* ── QR scheduling ───────────────────────────────────────────────── */
-let _qrTimer=null;
+/* ── QR scheduling — 180ms debounce ─────────────────────────────── */
+let _qrTimer = null;
 function scheduleQR(fields) {
   if (_qrTimer) clearTimeout(_qrTimer);
-  _qrTimer=setTimeout(()=>triggerQR(fields),180);
+  _qrTimer = setTimeout(() => triggerQR(fields), 180);
 }
 function triggerQR(fields) {
-  _qrTimer=null;
-  const f=fields!==undefined?fields:S.fields;
-  const errs=validateFields(S.qrType,f);
-  if (Object.keys(errs).length){QRC.clear();return;}
-  const raw=buildData(S.qrType,f);
-  if (!raw.trim()){QRC.clear();return;}
-  // Resolve effective colors: default B&W unless color mode is on
-  const fg=S.colorMode?safeHex(S.fgColor,"#000000"):"#000000";
-  const bg=S.colorMode?safeHex(S.bgColor,"#ffffff"):"#ffffff";
-  QRC.generate({
-    data:raw, ecLevel:S.ecLevel,
-    fg, bg,
-    logoSrc:S.logoOpen?S.logoSrc:null,
-    logoSize:S.logoOpen?S.logoSize:0,
-    hasMargin:S.hasMargin,
-  });
+  _qrTimer = null;
+  const f    = fields !== undefined ? fields : S.fields;
+  const errs = validateFields(S.qrType, f);
+  if (Object.keys(errs).length) { QRC.clear(); return; }
+  const raw  = buildData(S.qrType, f);
+  if (!raw.trim()) { QRC.clear(); return; }
+  QRC.generate({ data: raw, ecLevel: S.ecLevel, hasMargin: S.hasMargin });
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   RENDER
-═══════════════════════════════════════════════════════════════════ */
-const tog=(on,onClick)=>h("button",{class:"tog"+(on?" on":""),onClick},h("div",{class:"tog-k"}));
+/* ── syncMount: cheap QR_MOUNT class/scanline sync ──────────────── */
+function syncMount(hasData) {
+  const hd = hasData !== undefined ? hasData : !!buildData(S.qrType, S.fields).trim();
+  QR_MOUNT.className =
+    (!hd ? "qr-mount empty" : "qr-mount") +
+    (S.verifyStatus==="pass" ? " pass" : S.verifyStatus==="fail" ? " fail" : "");
+
+  let sl = QR_MOUNT.querySelector(".scanline-wrap");
+  if (S.verifyStatus==="checking") {
+    if (!sl) {
+      sl = document.createElement("div"); sl.className="scanline-wrap";
+      const ln = document.createElement("div"); ln.className="scanline";
+      sl.appendChild(ln); QR_MOUNT.appendChild(sl);
+    }
+  } else { if (sl) sl.remove(); }
+
+  let hint = QR_MOUNT.querySelector(".empty-hint");
+  if (!hd) {
+    if (!hint) {
+      hint = document.createElement("div"); hint.className="empty-hint";
+      const big = document.createElement("div"); big.className="big"; big.textContent="▣";
+      const txt = document.createElement("div"); txt.className="txt"; txt.textContent="Enter data to generate";
+      hint.appendChild(big); hint.appendChild(txt); QR_MOUNT.appendChild(hint);
+    }
+  } else { if (hint) hint.remove(); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RENDER — UI components
+══════════════════════════════════════════════════════════════════════ */
+const tog = (on, onClick) =>
+  h("button",{class:"tog"+(on?" on":""),onClick}, h("div",{class:"tog-k"}));
 
 function rHeader() {
-  return h("header",{},h("div",{class:"hdr-inner"},
-    h("div",{class:"logo"},
-      h("div",{class:"logo-box"},"▣"),
-      h("div",{class:"logo-name"},"QR",h("span",{},"_"),"studio")
-    ),
-    h("div",{class:"hdr-badges"},
-      h("div",{class:"hdr-badge v8"},"v8"),
-      h("div",{class:"hdr-badge"},"ENCODE")
+  return h("header",{},
+    h("div",{class:"hdr-inner"},
+      h("div",{class:"logo"},
+        h("div",{class:"logo-box"},"▣"),
+        h("div",{class:"logo-name"},"QR",h("span",{},"_"),"studio")
+      ),
+      h("div",{class:"hdr-badges"},
+        h("div",{class:"hdr-badge v9"},"v9"),
+        h("div",{class:"hdr-badge"},"ENCODE")
+      )
     )
-  ));
+  );
 }
 
 function rTypeSelector() {
   return h("div",{},
     h("div",{class:"sec-label",style:"margin-bottom:12px"},"◈ Content Type"),
     h("div",{class:"type-grid"},
-      QR_TYPES.map(t=>h("button",{
+      QR_TYPES.map(t => h("button",{
         class:"type-btn"+(S.qrType===t.id?" on":""),
-        onClick:()=>{
-          if(S.qrType===t.id) return;
-          const saved=lsGet("qrs_fields_"+t.id,{});
-          const errs=validateFields(t.id,saved);
-          update({qrType:t.id,fields:saved,fieldErrs:errs},()=>{buildForm(FORM_EL);triggerQR(saved);});
+        onClick: () => {
+          if (S.qrType===t.id) return;
+          const saved = lsGet("qrs_fields_"+t.id, {});
+          const errs  = validateFields(t.id, saved);
+          update({qrType:t.id, fields:saved, fieldErrs:errs}, () => {
+            buildForm(FORM_EL); triggerQR(saved);
+          });
         }
-      },h("span",{class:"ico"},t.icon),t.label))
+      }, h("span",{class:"ico"},t.icon), t.label))
     )
   );
 }
 
-/* ── Settings panel (flat — no tabs) ─────────────────────────────── */
-function rSettings(status) {
-  const effEC=QRC.clampEC(S.ecLevel,S.logoOpen?S.logoSrc:null,S.logoOpen?S.logoSize:0);
-  const dc={good:"var(--a)",caution:"var(--warn)",bad:"var(--danger)"};
-  const si={good:"✓",caution:"⚠",bad:"✕"};
-  const dpiRes=S.hasQR?calcPrint(S.qrVersion,S.printSize,S.printDPI):null;
-
+/* Settings: EC + quiet zone only. Clean. */
+function rSettings() {
   return h("div",{class:"sec"},
     h("div",{class:"sec-label"},"◈ Settings"),
 
-    // Error correction
     h("div",{class:"lbl"},"Error Correction"),
     h("div",{class:"ec-row"},
-      EC_LEVELS.map(l=>{
-        const isSel=S.ecLevel===l;
-        const isClamp=effEC!==S.ecLevel&&l===effEC;
-        return h("button",{
-          class:"ecb"+(isSel?" on":"")+(isClamp&&!isSel?" clamped":""),
-          title:isClamp&&!isSel?"Auto-upgraded — logo requires higher EC":"",
-          onClick:()=>{update({ecLevel:l});triggerQR();}
-        },l+(isClamp&&!isSel?"↑":""));
-      })
+      EC_LEVELS.map(l => h("button",{
+        class: "ecb"+(S.ecLevel===l?" on":""),
+        title: {L:"7% recovery — smallest QR",M:"15% recovery",Q:"25% recovery",H:"30% recovery — largest QR, most reliable"}[l],
+        onClick: () => { update({ecLevel:l}); triggerQR(); }
+      }, l))
     ),
-    h("div",{class:"ec-hint"},"L 7%  M 15%  Q 25%  H 30% recovery — H default"),
 
-    // Quiet zone
     h("div",{class:"tog-row"},
-      tog(S.hasMargin,()=>{update({hasMargin:!S.hasMargin});triggerQR();}),
-      h("span",{class:"tog-lbl",onClick:()=>{update({hasMargin:!S.hasMargin});triggerQR();}},"Quiet zone margin"),
-    ),
-    !S.hasMargin ? h("div",{class:"notice bad",style:"margin-bottom:10px"},
-      h("strong",{},"⚠ Disabled: "),
-      "Phone cameras need the white border to locate the QR pattern. Keep this on."
-    ) : null,
-
-    // ── Advanced disclosure ────────────────────────────────────────
-    h("button",{
-      class:"adv-toggle"+(S.advOpen?" open":""),
-      onClick:()=>update({advOpen:!S.advOpen})
-    },"Advanced settings",h("span",{class:"arr"},"▾")),
-
-    S.advOpen ? h("div",{class:"adv-body"},
-      // Print DPI calculator
-      h("div",{class:"dpi-wrap"},
-        h("div",{class:"dpi-title"},"◈ Print Readability"),
-        h("div",{class:"dpi-row"},
-          h("div",{},h("div",{class:"lbl"},"Print size (in)"),
-            h("input",{type:"number",value:S.printSize,min:0.5,max:24,step:0.5,
-              onInput:e=>{update({printSize:parseFloat(e.target.value)||2});}})),
-          h("div",{},h("div",{class:"lbl"},"DPI"),
-            h("input",{type:"number",value:S.printDPI,min:72,max:1200,step:1,
-              onInput:e=>{update({printDPI:parseInt(e.target.value)||300});}}))
-        ),
-        dpiRes
-          ? h("div",{class:"dpi-result "+dpiRes.level},dpiRes.msg)
-          : h("div",{class:"dpi-result empty"},"Generate a QR to see print analysis")
-      ),
-
-      // Scan status
-      h("div",{class:"scan-box "+status.level},
-        h("div",{class:"scan-hdr"},
-          h("div",{class:"scan-dot",style:{background:dc[status.level]}}),
-          h("div",{class:"scan-title",style:{color:dc[status.level]}},status.label)
-        ),
-        status.reasons.length
-          ? h("div",{class:"scan-items"},status.reasons.map(r=>h("div",{class:"scan-item"},
-              h("span",{style:{color:r.sev==="bad"?"var(--danger)":"var(--warn)",flexShrink:"0"}},si[r.sev]),
-              h("span",{},r.msg)
-            )))
-          : h("div",{class:"scan-item"},h("span",{style:"color:var(--a);flex-shrink:0"},"✓"),h("span",{},"No issues detected"))
-      )
-    ) : null,
-
-    // ── Color mode disclosure ──────────────────────────────────────
-    h("button",{
-      class:"adv-toggle"+(S.colorMode?" open":""),
-      style:"margin-top:8px",
-      onClick:()=>{
-        const next=!S.colorMode;
-        if (next) toast("Color mode: ensure contrast ≥ 4:1 for phone cameras","wn",4000);
-        update({colorMode:next}); triggerQR();
-      }
-    },
-      S.colorMode?"🎨 Color mode — ON (click to disable)":"🎨 Color mode",
-      h("span",{class:"arr"},S.colorMode?"▾":"▸")
-    ),
-
-    S.colorMode ? h("div",{class:"adv-body"},
-      h("div",{class:"notice warn",style:"margin-bottom:12px"},
-        h("strong",{},"⚠ Reliability risk: "),
-        "Custom colors reduce scan reliability. Minimum 4:1 contrast required. Black on white is always faster."
-      ),
-      // Foreground
-      h("div",{class:"c-row"},
-        h("span",{class:"c-lbl"},"Foreground"),
-        h("div",{class:"c-ctrl"},
-          h("div",{class:"swatch",style:{background:safeHex(S.fgColor,"#000")}},
-            h("input",{type:"color",value:safeHex(S.fgColor,"#000000"),
-              onInput:e=>{update({fgColor:e.target.value});triggerQR();}})
-          ),
-          h("input",{type:"text",class:"hex",value:S.fgColor,
-            onInput:e=>{if(/^#[0-9a-fA-F]{0,6}$/.test(e.target.value.trim())){update({fgColor:e.target.value.trim()});triggerQR();}}
-          })
-        )
-      ),
-      // Background
-      h("div",{class:"c-row"},
-        h("span",{class:"c-lbl"},"Background"),
-        h("div",{class:"c-ctrl"},
-          h("div",{class:"swatch",style:{background:safeHex(S.bgColor,"#fff")}},
-            h("input",{type:"color",value:safeHex(S.bgColor,"#ffffff"),
-              onInput:e=>{update({bgColor:e.target.value});triggerQR();}})
-          ),
-          h("input",{type:"text",class:"hex",value:S.bgColor,
-            onInput:e=>{if(/^#[0-9a-fA-F]{0,6}$/.test(e.target.value.trim())){update({bgColor:e.target.value.trim()});triggerQR();}}
-          })
-        )
-      ),
-      (() => {
-        const ratio=cr(S.fgColor,S.bgColor);
-        const cls=ratio>=4?"notice":"notice warn";
-        const msg=ratio>=4?`Contrast ${ratio.toFixed(1)}:1 — good for phone cameras`:`Contrast ${ratio.toFixed(1)}:1 — below 4:1 minimum`;
-        return h("div",{class:cls},msg);
-      })()
-    ) : null,
-
-    // ── Logo disclosure ────────────────────────────────────────────
-    h("button",{
-      class:"adv-toggle"+(S.logoOpen?" open":""),
-      style:"margin-top:8px",
-      onClick:()=>{
-        const next=!S.logoOpen;
-        if (next) toast("Logo reduces reliability — EC auto-upgraded to H","wn",3500);
-        update({logoOpen:next}); triggerQR();
-      }
-    },
-      S.logoOpen?"🖼 Logo overlay — ON (click to disable)":"🖼 Logo overlay",
-      h("span",{class:"arr"},S.logoOpen?"▾":"▸")
-    ),
-
-    S.logoOpen ? h("div",{class:"adv-body"},
-      h("div",{class:"notice warn",style:"margin-bottom:10px"},
-        h("strong",{},"⚠ EC auto-upgraded to H. "),
-        "Logo obscures data modules — high error correction is mandatory."
-      ),
-      S.logoSrc
-        ? h("div",{class:"logo-prev"},
-            h("img",{class:"logo-img",src:S.logoSrc,alt:"logo"}),
-            h("div",{style:"flex:1"},
-              h("div",{style:"font-size:11px;color:var(--mut);margin-bottom:5px"},`Size: ${S.logoSize}%`),
-              h("input",{type:"range",min:10,max:30,value:S.logoSize,style:"width:100%",
-                onInput:e=>{update({logoSize:+e.target.value});triggerQR();}})
-            ),
-            h("button",{class:"logo-rm",onClick:()=>{update({logoSrc:null,logoSize:20});triggerQR();}},"×")
-          )
-        : h("button",{class:"logo-up",onClick:()=>document.getElementById("logo-inp")?.click()},
-            h("span",{style:"font-size:18px"},"⬆"),
-            h("span",{style:"font-size:12px;font-weight:600"},"Upload Logo"),
-            h("span",{style:"font-size:10px;color:rgba(255,255,255,.2)"},"PNG, JPEG, GIF, WebP · max 2MB")
-          ),
-      h("input",{id:"logo-inp",type:"file",accept:"image/png,image/jpeg,image/gif,image/webp",style:"display:none",
-        onChange:e=>{
-          const f=e.target.files?.[0]; if(!f) return;
-          if(!/^image\/(png|jpeg|gif|webp)$/.test(f.type)){toast("Only PNG/JPEG/GIF/WebP","wn");return;}
-          if(f.size>2*1024*1024){toast("Logo too large (max 2MB)","wn");return;}
-          const r=new FileReader();
-          r.onload=ev=>{
-            if(!isSafeImageDataURI(ev.target.result)){toast("Invalid image","er");return;}
-            update({logoSrc:ev.target.result,ecLevel:"H"}); triggerQR();
-          };
-          r.readAsDataURL(f);
-        }
-      })
-    ) : null,
-
-    // ── Batch disclosure ───────────────────────────────────────────
-    h("button",{
-      class:"adv-toggle"+(S.batchOpen?" open":""),
-      style:"margin-top:8px",
-      onClick:()=>update({batchOpen:!S.batchOpen})
-    },"📋 Batch CSV → ZIP",h("span",{class:"arr"},S.batchOpen?"▾":"▸")),
-
-    S.batchOpen ? h("div",{class:"adv-body"},
-      h("div",{style:"font-size:11px;color:rgba(255,255,255,.25);margin-bottom:10px;line-height:1.7"},
-        "Format: ",h("span",{style:"color:rgba(184,244,0,.55);font-family:'Space Mono',monospace"},"label,url"),
-        ` per line · max ${BATCH_MAX_ROWS} rows · always B&W square`
-      ),
-      h("button",{class:"batch-drop",onClick:()=>document.getElementById("batch-inp")?.click()},
-        h("span",{style:"font-size:20px"},"📋"),
-        h("span",{style:"font-size:12px;font-family:'Space Mono',monospace"},"Upload CSV"),
-        h("span",{style:"font-size:10px;color:rgba(255,255,255,.2)"},"or paste below")
-      ),
-      h("input",{id:"batch-inp",type:"file",accept:".csv,text/csv",style:"display:none",
-        onChange:async e=>{
-          const f=e.target.files?.[0]; if(!f) return;
-          if(f.size>BATCH_MAX_BYTES){toast("CSV too large","wn");return;}
-          const text=await f.text(); e.target.value=""; runBatch(text);
-        }
-      }),
-      h("div",{style:"margin-top:8px"},
-        h("textarea",{placeholder:"homepage,https://example.com\nshop,https://shop.example.com",style:"min-height:64px",
-          onBlur:e=>{if(e.target.value.trim()){runBatch(e.target.value);e.target.value="";}}
-        })
-      ),
-      S.batchProgress?h("div",{class:"batch-progress"},
-        h("div",{class:"batch-txt"},`Generating ${S.batchProgress.done} / ${S.batchProgress.total}`),
-        h("div",{class:"batch-bar-wrap"},h("div",{class:"batch-bar",style:{width:`${Math.round(S.batchProgress.done/S.batchProgress.total*100)}%`}}))
-      ):null,
-      S.batchBlob?h("div",{class:"batch-progress"},
-        h("div",{class:"batch-txt",style:"color:rgba(184,244,0,.7)"},"✓ ZIP ready"),
-        h("button",{class:"batch-dl",onClick:downloadBatch},"⬇ Download ZIP")
-      ):null
-    ) : null
+      tog(S.hasMargin, () => { update({hasMargin:!S.hasMargin}); triggerQR(); }),
+      h("span",{
+        class:"tog-lbl",
+        onClick: () => { update({hasMargin:!S.hasMargin}); triggerQR(); }
+      },"Quiet zone margin")
+    )
   );
 }
 
-/* ── Stats bar ───────────────────────────────────────────────────── */
+/* Stats bar: version, capacity, bytes, EC — nothing more */
 function rQRStats(rawData) {
-  if (!S.hasQR||!rawData.trim()) return null;
-  const byteLen=new TextEncoder().encode(rawData).length;
-  const effEC=QRC.clampEC(S.ecLevel,S.logoOpen?S.logoSrc:null,S.logoOpen?S.logoSize:0);
-  const maxCap=QR_CAP[effEC]?.[S.qrVersion-1]||0;
-  const pct=maxCap?Math.round(byteLen/maxCap*100):0;
-  const vCl=S.qrVersion>25?"bad":S.qrVersion>15?"warn":"";
-  const pCl=pct>90?"bad":pct>70?"warn":"";
-  const isISO=!S.colorMode&&!S.logoOpen&&S.hasMargin;
+  if (!S.hasQR || !rawData.trim()) return null;
+  const byteLen = new TextEncoder().encode(rawData).length;
+  const maxCap  = QR_CAP[S.ecLevel]?.[S.qrVersion-1] || 0;
+  const pct     = maxCap ? Math.round(byteLen/maxCap*100) : 0;
+  const vCl     = S.qrVersion > 25 ? "bad" : S.qrVersion > 15 ? "warn" : "";
+  const pCl     = pct > 90 ? "bad" : pct > 70 ? "warn" : "";
 
-  const wrap=document.createElement("div"); wrap.className="qr-stats";
-  const chips=[
-    h("div",{class:`stat-chip ${vCl}`},"v",h("span",{class:"sv"},S.qrVersion)),
-    h("div",{class:`stat-chip ${pCl}`},"cap ",h("span",{class:"sv"},pct+"%")),
-    h("div",{class:"stat-chip"},"bytes ",h("span",{class:"sv"},byteLen)),
-    h("div",{class:"stat-chip"},h("span",{class:"sv"},effEC)," EC"),
-  ];
-  if (isISO) chips.push(h("div",{class:"stat-chip iso"},h("span",{class:"sv"},"✓")," ISO"));
-  chips.forEach(c=>wrap.appendChild(c));
+  const wrap = document.createElement("div"); wrap.className = "qr-stats";
+  [
+    h("div",{class:`stat-chip ${vCl}`},    "v",   h("span",{class:"sv"}, S.qrVersion)),
+    h("div",{class:`stat-chip ${pCl}`},    "cap ", h("span",{class:"sv"}, pct+"%")),
+    h("div",{class:"stat-chip"},           "bytes ",h("span",{class:"sv"}, byteLen)),
+    h("div",{class:"stat-chip"},           h("span",{class:"sv"}, S.ecLevel)," EC"),
+  ].forEach(c => wrap.appendChild(c));
   return wrap;
 }
 
-/* ── Preview panel ───────────────────────────────────────────────── */
+/* Preview panel */
 function rPreviewPanel(rawData) {
-  const hasData=!!rawData.trim();
-  const bg=S.colorMode?safeHex(S.bgColor,"#ffffff"):"#ffffff";
+  const hasData = !!rawData.trim();
+  syncMount(hasData);
 
-  QR_MOUNT.className=(!hasData?"qr-mount empty":"qr-mount")+
-    (S.verifyStatus==="pass"?" pass":S.verifyStatus==="fail"?" fail":"");
-  QR_MOUNT.style.background=hasData?bg:"";
-
-  let sl=QR_MOUNT.querySelector(".scanline-wrap");
-  if (S.verifyStatus==="checking"||S.verifyStatus==="loading"){
-    if(!sl){sl=document.createElement("div");sl.className="scanline-wrap";const ln=document.createElement("div");ln.className="scanline";sl.appendChild(ln);QR_MOUNT.appendChild(sl);}
-  } else {if(sl)sl.remove();}
-
-  let hint=QR_MOUNT.querySelector(".empty-hint");
-  if(!hasData){
-    if(!hint){
-      hint=document.createElement("div");hint.className="empty-hint";
-      const big=document.createElement("div");big.className="big";big.textContent="▣";
-      const txt=document.createElement("div");txt.className="txt";txt.textContent="Enter data to generate";
-      hint.appendChild(big);hint.appendChild(txt);QR_MOUNT.appendChild(hint);
-    }
-  } else {if(hint)hint.remove();}
-
-  const stats=rQRStats(rawData);
+  const stats = rQRStats(rawData);
 
   return h("div",{class:"sec"},
     h("div",{class:"prev-hdr"},
@@ -1210,84 +1011,81 @@ function rPreviewPanel(rawData) {
     ),
     h("div",{id:"qr-mount-slot"}),
     stats,
-    S.hasQR&&hasData?h("div",{},
+    S.hasQR && hasData ? h("div",{},
       h("div",{class:"dl-row"},
         h("button",{class:"btn-main",onClick:dlQR},"⬇ Download PNG")
       ),
       h("div",{class:"cp-row"},
-        h("button",{class:"btn-g"+(S.imgCopied?" done":""),onClick:copyImg},S.imgCopied?"✓ Copied!":"⎘ Copy Image"),
-        h("button",{class:"btn-g"+(S.dataCopied?" done":""),onClick:()=>copyData(rawData)},S.dataCopied?"✓ Copied!":"⎘ Copy Data")
-      ),
-      (()=>{
-        const chip=document.createElement("div"); chip.className="data-chip";
-        const pre=document.createElement("span"); pre.style.color="var(--a)"; pre.textContent="▶ ";
-        chip.appendChild(pre); chip.appendChild(document.createTextNode(rawData));
-        return chip;
-      })(),
-      h("div",{class:"cam-tip"},"📱 Most native phone cameras decode QR codes directly — no app needed")
-    ):null
+        h("button",{
+          class:"btn-g"+(S.imgCopied?" done":""),
+          onClick:copyImg
+        }, S.imgCopied?"✓ Copied!":"⎘ Copy Image"),
+        h("button",{
+          class:"btn-g"+(S.dataCopied?" done":""),
+          onClick:()=>copyData(rawData)
+        }, S.dataCopied?"✓ Copied!":"⎘ Copy Data")
+      )
+    ) : null
   );
 }
 
 /* ── Main render ─────────────────────────────────────────────────── */
-let _prevSig=null;
+let _prevSig = null;
 function render() {
-  const root=document.getElementById("root"); if(!root) return;
-  const rawData=buildData(S.qrType,S.fields);
-  const hasData=!!rawData.trim();
-  const byteLen=new TextEncoder().encode(rawData).length;
-  const status=scanStatus(S.ecLevel,S.logoOpen?S.logoSize:0,byteLen,S.hasMargin,S.qrVersion,S.colorMode,S.fgColor,S.bgColor);
+  const root = document.getElementById("root"); if (!root) return;
 
-  const sig=[S.qrType,S.ecLevel,S.hasMargin,S.colorMode,S.fgColor,S.bgColor,
-             S.logoOpen,S.logoSrc?"y":"n",S.logoSize,S.advOpen,S.batchOpen,
-             status.level,hasData,S.hasQR,S.qrVersion,S.printSize,S.printDPI,
-             S.batchProgress?"y":"n",S.batchBlob?"y":"n",
-             Object.keys(S.fieldErrs).join(",")].join("|");
+  const rawData = buildData(S.qrType, S.fields);
+  const hasData = !!rawData.trim();
 
-  // Cheap always-runs
-  const bg=S.colorMode?safeHex(S.bgColor,"#ffffff"):"#ffffff";
-  QR_MOUNT.className=(!hasData?"qr-mount empty":"qr-mount")+
-    (S.verifyStatus==="pass"?" pass":S.verifyStatus==="fail"?" fail":"");
-  QR_MOUNT.style.background=hasData?bg:"";
-  let sl=QR_MOUNT.querySelector(".scanline-wrap");
-  if(S.verifyStatus==="checking"||S.verifyStatus==="loading"){
-    if(!sl){sl=document.createElement("div");sl.className="scanline-wrap";const ln=document.createElement("div");ln.className="scanline";sl.appendChild(ln);QR_MOUNT.appendChild(sl);}
-  }else{if(sl)sl.remove();}
-  let hint=QR_MOUNT.querySelector(".empty-hint");
-  if(!hasData){if(!hint){hint=document.createElement("div");hint.className="empty-hint";const b=document.createElement("div");b.className="big";b.textContent="▣";const t=document.createElement("div");t.className="txt";t.textContent="Enter data to generate";hint.appendChild(b);hint.appendChild(t);QR_MOUNT.appendChild(hint);}}
-  else{if(hint)hint.remove();}
+  const sig = [
+    S.qrType, S.ecLevel, S.hasMargin,
+    hasData, S.hasQR, S.qrVersion,
+    S.imgCopied, S.dataCopied,
+    Object.keys(S.fieldErrs).join(",")
+  ].join("|");
 
+  // Always sync mount (cheap)
+  syncMount(hasData);
   updateVerifyBadge();
-  if (sig===_prevSig) return;
-  _prevSig=sig;
+
+  if (sig === _prevSig) return;
+  _prevSig = sig;
 
   // Full rebuild
-  const tree=document.createElement("div");
+  const tree = document.createElement("div");
   tree.appendChild(rHeader());
-  const main=document.createElement("div"); main.className="main";
-  const grid=document.createElement("div"); grid.className="grid";
 
-  const left=document.createElement("div");
-  const typeSec=document.createElement("div"); typeSec.className="sec";
+  const main = document.createElement("div"); main.className = "main";
+  const grid = document.createElement("div"); grid.className = "grid";
+
+  // Left column
+  const left = document.createElement("div");
+
+  const typeSec = document.createElement("div"); typeSec.className = "sec";
   typeSec.appendChild(rTypeSelector()); left.appendChild(typeSec);
 
-  const formSec=document.createElement("div"); formSec.className="sec"; formSec.style.marginTop="14px";
-  const fl=document.createElement("div"); fl.className="sec-label"; fl.textContent="◈ Content";
+  const formSec = document.createElement("div"); formSec.className = "sec";
+  formSec.style.marginTop = "14px";
+  const fl = document.createElement("div"); fl.className = "sec-label"; fl.textContent = "◈ Content";
   formSec.appendChild(fl); formSec.appendChild(FORM_EL); left.appendChild(formSec);
 
-  left.appendChild(rSettings(status));
+  left.appendChild(rSettings());
   grid.appendChild(left);
 
-  const right=document.createElement("div"); right.className="preview-wrap";
+  // Right column
+  const right = document.createElement("div"); right.className = "preview-wrap";
   right.appendChild(rPreviewPanel(rawData));
   grid.appendChild(right);
 
-  main.appendChild(grid); tree.appendChild(main);
-  root.innerHTML="";
-  while(tree.firstChild) root.appendChild(tree.firstChild);
+  main.appendChild(grid);
+  tree.appendChild(main);
 
-  const slot=document.getElementById("qr-mount-slot");
-  if(slot) slot.replaceWith(QR_MOUNT);
+  root.innerHTML = "";
+  while (tree.firstChild) root.appendChild(tree.firstChild);
+
+  // Re-attach persistent elements
+  const slot = document.getElementById("qr-mount-slot");
+  if (slot) slot.replaceWith(QR_MOUNT);
 
   buildForm(FORM_EL);
   updateVerifyBadge();
@@ -1295,35 +1093,25 @@ function render() {
 
 /* ── Verify badge ────────────────────────────────────────────────── */
 function updateVerifyBadge() {
-  const hdr=document.querySelector(".prev-hdr"); if(!hdr) return;
-  let badge=hdr.querySelector(".vbadge");
-  if (!S.verifyStatus){if(badge)badge.remove();return;}
-  if (!badge){badge=document.createElement("span");hdr.appendChild(badge);}
-  const map={
-    loading: ["vbadge loading", "⟳ loading…"],
-    checking:["vbadge checking","⟳ verifying…"],
-    pass:    ["vbadge pass",    "✓ verified"],
-    fail:    ["vbadge fail",    "⚠ verify failed"],
-  };
-  const [cls,txt]=map[S.verifyStatus]||["vbadge",""];
-  badge.className=cls; badge.textContent=txt;
+  const hdr = document.querySelector(".prev-hdr"); if (!hdr) return;
+  let badge = hdr.querySelector(".vbadge");
+  if (!S.verifyStatus) { if (badge) badge.remove(); return; }
+  if (!badge) { badge = document.createElement("span"); hdr.appendChild(badge); }
 
-  const mount=document.getElementById("qr-mount"); if(!mount) return;
-  let disc=document.getElementById("vdisc");
-  if (S.verifyStatus==="pass"){
-    if(!disc){
-      disc=document.createElement("div"); disc.id="vdisc";
-      disc.style.cssText="font-size:10px;color:rgba(255,255,255,.16);text-align:center;margin-bottom:10px;font-family:'Space Mono',monospace;line-height:1.5;padding:0 4px";
-      disc.textContent="Decoded OK. Real-world scan depends on print quality and lighting.";
-      mount.insertAdjacentElement("afterend",disc);
-    }
-  } else {if(disc)disc.remove();}
+  const map = {
+    checking: ["vbadge checking", "⟳ verifying…"],
+    pass:     ["vbadge pass",     "✓ verified"],
+    fail:     ["vbadge fail",     "⚠ failed"],
+  };
+  const [cls, txt] = map[S.verifyStatus] || ["vbadge",""];
+  badge.className = cls;
+  badge.textContent = txt;
 }
 
 /* ── Boot ────────────────────────────────────────────────────────── */
 render();
 buildForm(FORM_EL);
-if (Object.keys(S.fields).length>0) triggerQR();
+if (Object.keys(S.fields).length > 0) triggerQR();
 </script>
 </body>
 </html>
