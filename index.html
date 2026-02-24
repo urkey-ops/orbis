@@ -317,9 +317,9 @@ const G18      = (1<<12)|(1<<11)|(1<<10)|(1<<9)|(1<<8)|(1<<5)|(1<<2)|1;
 const G15_MASK = (1<<14)|(1<<12)|(1<<10)|(1<<4)|(1<<1);
 
 var EXP_TABLE=new Array(256),LOG_TABLE=new Array(256);
-for(var _i=0;_i<8;_i++)EXP_TABLE[_i]=1<<_i;
-for(var _i=8;_i<256;_i++)EXP_TABLE[_i]=EXP_TABLE[_i-4]^EXP_TABLE[_i-5]^EXP_TABLE[_i-6]^EXP_TABLE[_i-8];
-for(var _i=0;_i<255;_i++)LOG_TABLE[EXP_TABLE[_i]]=_i;
+for(let _i=0;_i<8;_i++)EXP_TABLE[_i]=1<<_i;
+for(let _i=8;_i<256;_i++)EXP_TABLE[_i]=EXP_TABLE[_i-4]^EXP_TABLE[_i-5]^EXP_TABLE[_i-6]^EXP_TABLE[_i-8];
+for(let _i=0;_i<255;_i++)LOG_TABLE[EXP_TABLE[_i]]=_i;
 
 const QRMath={
   glog:function(n){return LOG_TABLE[n]},
@@ -410,39 +410,68 @@ function makeQR(payload, ec) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   WORKER — fully inlined, single blob.
-   [FIX-9]  No importScripts. No _algoBlobUrl. No second blob.
-            Algo is duplicated inline in the string — same approach as v10.
-   [FIX-10] Blob URL revoked immediately after new Worker() succeeds.
-   [FIX-11] Worker exposes makeQR locally — no self._makeQR global.
+   WORKER — single source of truth, zero duplication [FIX-B]
+
+   Previously: worker blob was a hand-copied ~150-line string duplicate
+   of the main-thread algorithm. A single divergence between the two
+   copies would produce silent, intermittent bugs.
+
+   Fix: serialize the live main-thread functions at runtime via
+   Function.prototype.toString() (standardized ES2019+, all targets).
+   The worker runs the *exact same bytecode path* as the main thread.
+   One definition, two execution contexts.
+
+   [FIX-9]  No importScripts. No second blob URL.
+   [FIX-10] Blob URL revoked immediately after Worker() construction.
+   [FIX-11] wMakeQR is worker-local — no self._makeQR global.
 ══════════════════════════════════════════════════════════════════════ */
-const WORKER_SRC = `"use strict";
-var ET=new Array(256),LT=new Array(256);
-for(var i=0;i<8;i++)ET[i]=1<<i;
-for(var i=8;i<256;i++)ET[i]=ET[i-4]^ET[i-5]^ET[i-6]^ET[i-8];
-for(var i=0;i<255;i++)LT[ET[i]]=i;
-var QM={glog:function(n){return LT[n]},gexp:function(n){while(n<0)n+=255;while(n>=256)n-=255;return ET[n]}};
-function QP(num,shift){var o=0;while(o<num.length&&num[o]===0)o++;this.num=new Array(num.length-o+shift);for(var i=0;i<num.length-o;i++)this.num[i]=num[i+o];}
-QP.prototype={get:function(i){return this.num[i]},getLength:function(){return this.num.length},multiply:function(e){var n=new Array(this.getLength()+e.getLength()-1);for(var i=0;i<this.getLength();i++)for(var j=0;j<e.getLength();j++)n[i+j]^=QM.gexp(QM.glog(this.get(i))+QM.glog(e.get(j)));return new QP(n,0)},mod:function(e){if(this.getLength()-e.getLength()<0)return this;var r=QM.glog(this.get(0))-QM.glog(e.get(0)),n=new Array(this.getLength());for(var i=0;i<this.getLength();i++)n[i]=this.get(i);for(var i=0;i<e.getLength();i++)n[i]^=QM.gexp(QM.glog(e.get(i))+r);return new QP(n,0).mod(e)}};
-function QB(t,d){this.totalCount=t;this.dataCount=d}
-var RBT=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]];
-QB.getRSBlocks=function(tn,ec){var t=RBT[(tn-1)*4+{L:0,M:1,Q:2,H:3}[ec]],len=t.length/3,list=[];for(var i=0;i<len;i++)for(var j=0;j<t[i*3];j++)list.push(new QB(t[i*3+1],t[i*3+2]));return list};
-function QBB(){this.buffer=[];this.length=0}
-QBB.prototype={get:function(i){return((this.buffer[Math.floor(i/8)]>>>(7-i%8))&1)===1},put:function(n,l){for(var i=0;i<l;i++)this.putBit(((n>>>(l-i-1))&1)===1)},getLengthInBits:function(){return this.length},putBit:function(b){var bi=Math.floor(this.length/8);if(this.buffer.length<=bi)this.buffer.push(0);if(b)this.buffer[bi]|=(0x80>>>(this.length%8));this.length++}};
-function Q8B(data){this.mode=4;this._bytes=new TextEncoder().encode(data);}
-Q8B.prototype={getLength:function(){return this._bytes.length},getLengthInBits:function(tn){return tn<10?8:16},write:function(buf){for(var i=0;i<this._bytes.length;i++)buf.put(this._bytes[i],8);}};
-var G15=(1<<10)|(1<<8)|(1<<5)|(1<<4)|(1<<2)|(1<<1)|1,G18=(1<<12)|(1<<11)|(1<<10)|(1<<9)|(1<<8)|(1<<5)|(1<<2)|1,G15M=(1<<14)|(1<<12)|(1<<10)|(1<<4)|(1<<1);
-function BD(d){var dg=0;while(d!==0){dg++;d>>>=1}return dg}
-function BTI(d){var v=d<<10;while(BD(v)-BD(G15)>=0)v^=(G15<<(BD(v)-BD(G15)));return((d<<10)|v)^G15M}
-function BTN(d){var v=d<<12;while(BD(v)-BD(G18)>=0)v^=(G18<<(BD(v)-BD(G18)));return(d<<12)|v}
-var PP=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]];
-var MP={PATTERN000:function(i,j){return(i+j)%2===0},PATTERN001:function(i,j){return i%2===0},PATTERN010:function(i,j){return j%3===0},PATTERN011:function(i,j){return(i+j)%3===0},PATTERN100:function(i,j){return(Math.floor(i/2)+Math.floor(j/3))%2===0},PATTERN101:function(i,j){return(i*j)%2+(i*j)%3===0},PATTERN110:function(i,j){return((i*j)%2+(i*j)%3)%2===0},PATTERN111:function(i,j){return((i*j)%3+(i+j)%2)%2===0}};
-function EP(n){var a=new QP([1],0);for(var i=0;i<n;i++)a=a.multiply(new QP([1,QM.gexp(i)],0));return a}
-function CD(tn,ec,dl){var rsb=QB.getRSBlocks(tn,ec),buf=new QBB();for(var i=0;i<dl.length;i++){var d=dl[i];buf.put(d.mode,4);buf.put(d.getLength(),d.getLengthInBits(tn));d.write(buf);}var tdc=0;for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;if(buf.getLengthInBits()>tdc*8)throw new Error("code length overflow.("+buf.getLengthInBits()+">"+tdc*8+")");if(buf.getLengthInBits()+4<=tdc*8)buf.put(0,4);while(buf.getLengthInBits()%8!==0)buf.putBit(false);while(true){if(buf.getLengthInBits()>=tdc*8)break;buf.put(0xEC,8);if(buf.getLengthInBits()>=tdc*8)break;buf.put(0x11,8);}var off=0,mdc=0,mec=0,dcd=new Array(rsb.length),ecd=new Array(rsb.length);for(var r=0;r<rsb.length;r++){var dc=rsb[r].dataCount,ec2=rsb[r].totalCount-dc;mdc=Math.max(mdc,dc);mec=Math.max(mec,ec2);dcd[r]=new Array(dc);for(var i=0;i<dcd[r].length;i++)dcd[r][i]=0xff&buf.buffer[i+off];off+=dc;var rp=EP(ec2),raw=new QP(dcd[r],rp.getLength()-1),mod=raw.mod(rp);ecd[r]=new Array(rp.getLength()-1);for(var i=0;i<ecd[r].length;i++){var mi=i+mod.getLength()-ecd[r].length;ecd[r][i]=(mi>=0)?mod.get(mi):0;}}var tcc=0;for(var i=0;i<rsb.length;i++)tcc+=rsb[i].totalCount;var data=new Array(tcc),idx=0;for(var i=0;i<mdc;i++)for(var r=0;r<rsb.length;r++)if(i<dcd[r].length)data[idx++]=dcd[r][i];for(var i=0;i<mec;i++)for(var r=0;r<rsb.length;r++)if(i<ecd[r].length)data[idx++]=ecd[r][i];return data;}
-function QM2(tn,ec){this.typeNumber=tn;this.errorCorrectionLevel=ec;this.modules=null;this.moduleCount=0;this.dataCache=null;this.dataList=[];}
-QM2.prototype={addData:function(d){this.dataList.push(new Q8B(d));this.dataCache=null;},isDark:function(r,c){return this.modules[r][c];},getModuleCount:function(){return this.moduleCount;},make:function(){if(this.typeNumber<1){var tn=1;for(;tn<40;tn++){var rsb=QB.getRSBlocks(tn,this.errorCorrectionLevel),buf=new QBB(),tdc=0;for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;for(var i=0;i<this.dataList.length;i++){var d=this.dataList[i];buf.put(d.mode,4);buf.put(d.getLength(),d.getLengthInBits(tn));d.write(buf);}if(buf.getLengthInBits()<=tdc*8)break;}this.typeNumber=tn;}this.makeImpl(false,this.getBestMaskPattern());},makeImpl:function(test,mp){this.moduleCount=this.typeNumber*4+17;this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var c=0;c<this.moduleCount;c++)this.modules[r][c]=null;}this.setupProbe(0,0);this.setupProbe(this.moduleCount-7,0);this.setupProbe(0,this.moduleCount-7);this.setupAdjust();this.setupTiming();this.setupTypeInfo(test,mp);if(this.typeNumber>=7)this.setupTypeNum(test);if(this.dataCache==null)this.dataCache=CD(this.typeNumber,this.errorCorrectionLevel,this.dataList);this.mapData(this.dataCache,mp);},setupProbe:function(row,col){for(var r=-1;r<=7;r++){if(row+r<=-1||this.moduleCount<=row+r)continue;for(var c=-1;c<=7;c++){if(col+c<=-1||this.moduleCount<=col+c)continue;this.modules[row+r][col+c]=(r>=0&&r<=6&&(c===0||c===6))||(c>=0&&c<=6&&(r===0||r===6))||(r>=2&&r<=4&&c>=2&&c<=4);}}},setupAdjust:function(){var pos=PP[this.typeNumber-1];for(var i=0;i<pos.length;i++)for(var j=0;j<pos.length;j++){var row=pos[i],col=pos[j];if(this.modules[row][col]!==null)continue;for(var r=-2;r<=2;r++)for(var c=-2;c<=2;c++)this.modules[row+r][col+c]=(r===-2||r===2||c===-2||c===2||(r===0&&c===0));}},setupTiming:function(){for(var r=8;r<this.moduleCount-8;r++)if(this.modules[r][6]===null)this.modules[r][6]=(r%2===0);for(var c=8;c<this.moduleCount-8;c++)if(this.modules[6][c]===null)this.modules[6][c]=(c%2===0);},setupTypeInfo:function(test,mp){var data=(this.errorCorrectionLevel<<3)|mp,bits=BTI(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},setupTypeNum:function(test){var bits=BTN(this.typeNumber);for(var i=0;i<18;i++){this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=(!test&&((bits>>i)&1)===1);}for(var i=0;i<18;i++){this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=(!test&&((bits>>i)&1)===1);}},mapData:function(data,mp){var inc=-1,row=this.moduleCount-1,bi=7,bytei=0;var mf=MP['PATTERN'+('00'+mp.toString(2)).slice(-3)];for(var col=this.moduleCount-1;col>0;col-=2){if(col===6)col--;while(true){for(var c=0;c<2;c++){if(this.modules[row][col-c]===null){var dark=false;if(bytei<data.length)dark=(((data[bytei]>>>bi)&1)===1);if(mf(row,col-c))dark=!dark;this.modules[row][col-c]=dark;bi--;if(bi===-1){bytei++;bi=7;}}}row+=inc;if(row<0||this.moduleCount<=row){row-=inc;inc=-inc;break;}}}},getBestMaskPattern:function(){var ml=0,pat=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lp=this.getLostPoint();if(i===0||ml>lp){ml=lp;pat=i;}}return pat;},getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++){var sc=0,dark=this.isDark(r,c);for(var dr=-1;dr<=1;dr++){if(r+dr<0||mc<=r+dr)continue;for(var dc2=-1;dc2<=1;dc2++){if(c+dc2<0||mc<=c+dc2)continue;if(dr===0&&dc2===0)continue;if(dark===this.isDark(r+dr,c+dc2))sc++;}}if(sc>5)lp+=(3+sc-5);}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++)if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++)if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;var dc=0;for(var c=0;c<mc;c++)for(var r=0;r<mc;r++)if(this.isDark(r,c))dc++;lp+=Math.abs(100*dc/mc/mc-50)/5*10;return lp;}};
-function wMakeQR(payload,ec){var qr=new QM2(-1,ec);qr.addData(payload);qr.make();var mc=qr.getModuleCount(),version=(mc-17)/4,grid=new Uint8Array(mc*mc);for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(qr.isDark(r,c))grid[r*mc+c]=1;return{grid,mc,version};}
-self.onmessage=function(e){var id=e.data.id,payload=e.data.payload,ec=e.data.ec;try{var r=wMakeQR(payload,ec);self.postMessage({id,ok:true,grid:r.grid,mc:r.mc,version:r.version},[r.grid.buffer]);}catch(err){self.postMessage({id,ok:false,error:err.message});}};`;
+
+// Serialize algo constants as JSON (plain values, safe to JSON.stringify)
+const _CONST_SRC = [
+  ['RS_BLOCK_TABLE',         RS_BLOCK_TABLE],
+  ['PATTERN_POSITION_TABLE', PATTERN_POSITION_TABLE],
+  ['G15',                    G15],
+  ['G18',                    G18],
+  ['G15_MASK',               G15_MASK],
+].map(([n, v]) => `const ${n} = ${JSON.stringify(v)};`).join('\n');
+
+// Serialize GF tables — rebuild in worker exactly as main thread does
+const _GF_SRC = `
+var EXP_TABLE=new Array(256),LOG_TABLE=new Array(256);
+for(let i=0;i<8;i++)EXP_TABLE[i]=1<<i;
+for(let i=8;i<256;i++)EXP_TABLE[i]=EXP_TABLE[i-4]^EXP_TABLE[i-5]^EXP_TABLE[i-6]^EXP_TABLE[i-8];
+for(let i=0;i<255;i++)LOG_TABLE[EXP_TABLE[i]]=i;
+`;
+
+// Serialize live functions via .toString() — single source of truth
+// Each fn is defined above; .toString() returns its exact source text
+const _FN_SRC = [
+  QRMath, QRPolynomial, QRRSBlock, QRBitBuffer,
+  QR8bitByte, getBCHDigit, getBCHTypeInfo, getBCHTypeNumber,
+  MASK_PATTERN, errorCorrPoly, createData, QRCodeModel, makeQR,
+].map(fn => {
+  const s = fn.toString();
+  const name = fn.name;
+  // Plain object literals (QRMath, MASK_PATTERN) — wrap as const
+  if (s.startsWith('{')) return `const ${name} = ${s};`;
+  // Regular function declarations — emit as-is
+  return s;
+}).join('\n\n');
+
+// Worker onmessage handler — thin wrapper, calls makeQR by its live name
+const _HANDLER_SRC = `
+self.onmessage = function(e) {
+  const { id, payload, ec } = e.data;
+  try {
+    const r = makeQR(payload, ec);
+    self.postMessage({ id, ok: true, grid: r.grid, mc: r.mc, version: r.version }, [r.grid.buffer]);
+  } catch(err) {
+    self.postMessage({ id, ok: false, error: err.message });
+  }
+};`;
+
+const WORKER_SRC = `"use strict";\n${_CONST_SRC}\n${_GF_SRC}\n${_FN_SRC}\n${_HANDLER_SRC}`;
+
 
 /* ══════════════════════════════════════════════════════════════════
    WORKER LIFECYCLE — backoff respawn
@@ -1176,7 +1205,9 @@ function render() {
   const sig = [
     S.qrType, S.ecLevel, S.hasMargin,
     hasData, S.hasQR, S.qrVersion,
-    S.imgCopied, S.dataCopied, S.workerMode, S.storageError
+    S.imgCopied, S.dataCopied, S.workerMode, S.storageError,
+    S.verifyStatus  // [FIX-A] was missing — syncMount must run on verify state changes
+                    // so the pass/fail border and scanline removal are applied immediately
   ].join("|");
 
   if (sig === _prevSig) { updateVerifyBadge(); return; }
