@@ -637,6 +637,7 @@ function drawGrid(grid, mc, canvasSize, hasMargin) {
   const offset    = qzMods * modSz;
   const canvas    = document.createElement("canvas");
   canvas.width = canvas.height = snapped;
+  console.log(`[QR DBG] drawGrid mc=${mc} totalMods=${totalMods} canvasSize=${canvasSize} snapped=${snapped} modSz=${modSz}`);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,canvasSize,canvasSize);
   ctx.fillStyle = "#000000";
@@ -684,8 +685,6 @@ function qrDataMatch(expected, decoded, type) {
 }
 
 async function verifyWithJsQR(expectedData, canvas, type) {
-  // [FIX-A] Skip verify entirely for types with known decoder inconsistencies.
-  // Showing "⚠ failed" on a correctly-encoded WiFi QR is worse than no badge.
   if (VERIFY_SKIP_TYPES.has(type)) {
     update({ verifyStatus: null });
     return;
@@ -698,13 +697,21 @@ async function verifyWithJsQR(expectedData, canvas, type) {
     if (myToken !== _verifyToken) return;
     const ctx   = canvas.getContext("2d", { willReadFrequently: true });
     const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    console.log(`[QR DBG] verifying EC=${S.ecLevel} canvas=${canvas.width}x${canvas.height} token=${myToken}`);
     const res   = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "attemptBoth" });
-    if (myToken !== _verifyToken) return;
+    if (myToken !== _verifyToken) {
+      console.log(`[QR DBG] token stale: mine=${myToken} current=${_verifyToken} — DISCARDING`);
+      return;
+    }
+    console.log(`[QR DBG] jsQR result:`, res ? `"${res.data}"` : 'null (not detected)');
+    console.log(`[QR DBG] expected:    "${expectedData}"`);
     const matched = res ? qrDataMatch(expectedData, res.data, type) : false;
+    console.log(`[QR DBG] matched=${matched}`);
     if (res && !matched)
       console.warn("[QR v12] Verify mismatch\nExpected:", expectedData, "\nDecoded:", res.data);
     update({ verifyStatus: matched ? "pass" : "fail" });
-  } catch {
+  } catch(e) {
+    console.error('[QR DBG] verify error:', e);
     if (myToken === _verifyToken) update({ verifyStatus: null });
   }
 }
@@ -752,6 +759,7 @@ const QRC = (() => {
       el.appendChild(canvas);
       if (version === prevVersion && prevVersion !== 1) canvas.style.animation = "none";
 
+      console.log(`[QR DBG] generated EC=${opts.ecLevel} v${version} mc=${mc} canvas=${canvas.width}x${canvas.height} modSz=${canvas.width/(mc+8)}`);
       update({ hasQR: true, qrVersion: version });
       // [FIX-C+A] Pass type so verifyWithJsQR can apply the right matching strategy
       verifyWithJsQR(opts.data, canvas, S.qrType);
