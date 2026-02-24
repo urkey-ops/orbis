@@ -629,20 +629,36 @@ function buildData(type, f) {
 function drawGrid(grid, mc, canvasSize, hasMargin) {
   const qzMods    = hasMargin ? 4 : 0;
   const totalMods = mc + qzMods * 2;
-  // Snap canvas to nearest integer multiple of totalMods so every module
-  // lands on exact pixel boundaries — eliminates sub-pixel anti-aliasing
-  // that causes jsQR to misread format-info bits for certain EC levels.
   const snapped   = Math.ceil(canvasSize / totalMods) * totalMods;
-  const modSz     = snapped / totalMods;   // guaranteed integer
+  const modSz     = snapped / totalMods;
   const offset    = qzMods * modSz;
   const canvas    = document.createElement("canvas");
   canvas.width = canvas.height = snapped;
-  console.log(`[QR DBG] drawGrid mc=${mc} totalMods=${totalMods} canvasSize=${canvasSize} snapped=${snapped} modSz=${modSz}`);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,canvasSize,canvasSize);
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, snapped, snapped);
   ctx.fillStyle = "#000000";
   for(let r=0;r<mc;r++) for(let c=0;c<mc;c++) if(grid[r*mc+c]) ctx.fillRect(offset+c*modSz, offset+r*modSz, modSz, modSz);
   canvas.style.width = "100%"; canvas.style.height = "auto";
+  return canvas;
+}
+
+// Separate offscreen canvas for jsQR verification only.
+// jsQR 1.4.0 fails to detect QR codes below a certain module pixel size —
+// the exact threshold varies by QR version and EC level format-info bit pattern.
+// Fix: always render at VERIFY_MOD_SZ px/module (large enough for reliable detection)
+// independent of display canvas size. Display canvas is unchanged.
+const VERIFY_MOD_SZ = 16;  // px per module — empirically reliable for jsQR 1.4.0
+function drawGridForVerify(grid, mc) {
+  const qzMods  = 4;  // always include quiet zone for verify
+  const modSz   = VERIFY_MOD_SZ;
+  const offset  = qzMods * modSz;
+  const size    = (mc + qzMods * 2) * modSz;
+  const canvas  = document.createElement("canvas");
+  canvas.width  = canvas.height = size;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = "#000000";
+  for(let r=0;r<mc;r++) for(let c=0;c<mc;c++) if(grid[r*mc+c]) ctx.fillRect(offset+c*modSz, offset+r*modSz, modSz, modSz);
   return canvas;
 }
 
@@ -685,6 +701,8 @@ function qrDataMatch(expected, decoded, type) {
 }
 
 async function verifyWithJsQR(expectedData, canvas, type) {
+  // [FIX-A] Skip verify entirely for types with known decoder inconsistencies.
+  // Showing "⚠ failed" on a correctly-encoded WiFi QR is worse than no badge.
   if (VERIFY_SKIP_TYPES.has(type)) {
     update({ verifyStatus: null });
     return;
@@ -697,21 +715,13 @@ async function verifyWithJsQR(expectedData, canvas, type) {
     if (myToken !== _verifyToken) return;
     const ctx   = canvas.getContext("2d", { willReadFrequently: true });
     const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    console.log(`[QR DBG] verifying EC=${S.ecLevel} canvas=${canvas.width}x${canvas.height} token=${myToken}`);
     const res   = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "attemptBoth" });
-    if (myToken !== _verifyToken) {
-      console.log(`[QR DBG] token stale: mine=${myToken} current=${_verifyToken} — DISCARDING`);
-      return;
-    }
-    console.log(`[QR DBG] jsQR result:`, res ? `"${res.data}"` : 'null (not detected)');
-    console.log(`[QR DBG] expected:    "${expectedData}"`);
+    if (myToken !== _verifyToken) return;
     const matched = res ? qrDataMatch(expectedData, res.data, type) : false;
-    console.log(`[QR DBG] matched=${matched}`);
     if (res && !matched)
       console.warn("[QR v12] Verify mismatch\nExpected:", expectedData, "\nDecoded:", res.data);
     update({ verifyStatus: matched ? "pass" : "fail" });
-  } catch(e) {
-    console.error('[QR DBG] verify error:', e);
+  } catch {
     if (myToken === _verifyToken) update({ verifyStatus: null });
   }
 }
@@ -748,6 +758,9 @@ const QRC = (() => {
       const dpr        = Math.min(window.devicePixelRatio || 1, 3);
       const canvasSize = Math.round(Math.max(360, 360 * dpr));
       const canvas     = drawGrid(grid, mc, canvasSize, opts.hasMargin);
+      // Separate high-res canvas for jsQR — display canvas may be too small
+      // for jsQR 1.4.0 to reliably detect all QR versions/EC level combinations
+      const verifyCanvas = drawGridForVerify(grid, mc);
 
       const el = document.getElementById("qr-mount");
       if (!el || myToken !== _genToken) return;
@@ -759,10 +772,9 @@ const QRC = (() => {
       el.appendChild(canvas);
       if (version === prevVersion && prevVersion !== 1) canvas.style.animation = "none";
 
-      console.log(`[QR DBG] generated EC=${opts.ecLevel} v${version} mc=${mc} canvas=${canvas.width}x${canvas.height} modSz=${canvas.width/(mc+8)}`);
       update({ hasQR: true, qrVersion: version });
       // [FIX-C+A] Pass type so verifyWithJsQR can apply the right matching strategy
-      verifyWithJsQR(opts.data, canvas, S.qrType);
+      verifyWithJsQR(opts.data, verifyCanvas, S.qrType);
 
     } catch(e) {
       if (myToken !== _genToken) return;
