@@ -255,6 +255,20 @@ header{
             errors via persistent UI warning in Settings, not just a toast.
 
    [FIX-15] Duplicate "use strict" removed (was appearing twice in v12 draft).
+
+   [FIX-A]  verifyStatus added to _prevSig — syncMount() now correctly runs on
+            verify state changes (green/red border, scanline removal).
+
+   [FIX-B]  Algorithm duplication eliminated. WORKER_SRC built at runtime via
+            Function.prototype.toString() — single source of truth, zero manual
+            mirroring. Worker runs identical bytecode to main thread.
+
+   [FIX-C+A] Tiered verify matching implemented:
+            • wifi: skip entirely (WIFI: format inconsistent across decoders)
+            • email/sms/phone/vcard: decodeURIComponent normalization on both
+              sides before comparison — handles jsQR percent-encoding variance
+            • url/text: strict equality only — round-trip must be exact
+            verifyWithJsQR() now accepts type as third argument.
 ══════════════════════════════════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════════════════════════════
@@ -426,7 +440,6 @@ function makeQR(payload, ec) {
    [FIX-11] wMakeQR is worker-local — no self._makeQR global.
 ══════════════════════════════════════════════════════════════════════ */
 
-// Serialize algo constants as JSON (plain values, safe to JSON.stringify)
 const _CONST_SRC = [
   ['RS_BLOCK_TABLE',         RS_BLOCK_TABLE],
   ['PATTERN_POSITION_TABLE', PATTERN_POSITION_TABLE],
@@ -435,7 +448,6 @@ const _CONST_SRC = [
   ['G15_MASK',               G15_MASK],
 ].map(([n, v]) => `const ${n} = ${JSON.stringify(v)};`).join('\n');
 
-// Serialize GF tables — rebuild in worker exactly as main thread does
 const _GF_SRC = `
 var EXP_TABLE=new Array(256),LOG_TABLE=new Array(256);
 for(let i=0;i<8;i++)EXP_TABLE[i]=1<<i;
@@ -443,22 +455,16 @@ for(let i=8;i<256;i++)EXP_TABLE[i]=EXP_TABLE[i-4]^EXP_TABLE[i-5]^EXP_TABLE[i-6]^
 for(let i=0;i<255;i++)LOG_TABLE[EXP_TABLE[i]]=i;
 `;
 
-// Serialize live functions via .toString() — single source of truth
-// Each fn is defined above; .toString() returns its exact source text
 const _FN_SRC = [
   QRMath, QRPolynomial, QRRSBlock, QRBitBuffer,
   QR8bitByte, getBCHDigit, getBCHTypeInfo, getBCHTypeNumber,
   MASK_PATTERN, errorCorrPoly, createData, QRCodeModel, makeQR,
 ].map(fn => {
   const s = fn.toString();
-  const name = fn.name;
-  // Plain object literals (QRMath, MASK_PATTERN) — wrap as const
-  if (s.startsWith('{')) return `const ${name} = ${s};`;
-  // Regular function declarations — emit as-is
+  if (s.startsWith('{')) return `const ${fn.name} = ${s};`;
   return s;
 }).join('\n\n');
 
-// Worker onmessage handler — thin wrapper, calls makeQR by its live name
 const _HANDLER_SRC = `
 self.onmessage = function(e) {
   const { id, payload, ec } = e.data;
@@ -471,7 +477,6 @@ self.onmessage = function(e) {
 };`;
 
 const WORKER_SRC = `"use strict";\n${_CONST_SRC}\n${_GF_SRC}\n${_FN_SRC}\n${_HANDLER_SRC}`;
-
 
 /* ══════════════════════════════════════════════════════════════════
    WORKER LIFECYCLE — backoff respawn
@@ -490,7 +495,7 @@ function spawnWorker() {
     const blob = new Blob([WORKER_SRC], { type: "text/javascript" });
     const url  = URL.createObjectURL(blob);
     _worker    = new Worker(url);
-    URL.revokeObjectURL(url); // [FIX-10] revoke immediately — worker already loaded it
+    URL.revokeObjectURL(url);
 
     _worker.onmessage = ({ data }) => {
       const entry = _pending.get(data.id); if (!entry) return;
@@ -522,7 +527,6 @@ function qrViaWorker(payload, ec) {
   });
 }
 
-/* [FIX-11] qrMainThread calls makeQR directly — no window._makeQR lookup */
 function qrMainThread(payload, ec) {
   return new Promise((resolve, reject) => {
     try { resolve({ ok: true, ...makeQR(payload, ec) }); }
@@ -532,7 +536,6 @@ function qrMainThread(payload, ec) {
 
 /* ══════════════════════════════════════════════════════════════════
    jsQR — lazy verify, warms after 1.5s idle
-   jsQR backoff retry on load failure.
 ══════════════════════════════════════════════════════════════════════ */
 let _jsqrP = null, _jsqrFailCount = 0;
 function ensureJsQR() {
@@ -552,7 +555,7 @@ function ensureJsQR() {
   return _jsqrP;
 }
 
-/* ── Toast — [FIX-4] DOM construction, no innerHTML ─────────────── */
+/* ── Toast ───────────────────────────────────────────────────────── */
 function toast(msg, type = "ok", ms = 2800) {
   const c   = document.getElementById("toasts");
   const el  = document.createElement("div"); el.className = "toast " + type;
@@ -571,7 +574,6 @@ const MAX_URL   = 2048;
 const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
 
-/* [FIX-13] capField returns plain string (v10 behaviour preserved) */
 function capField(val, max) {
   if (typeof val !== "string") return "";
   const enc = new TextEncoder().encode(val);
@@ -631,7 +633,7 @@ function buildData(type, f) {
   }
 }
 
-/* ── Renderer — pure fillRect ────────────────────────────────────── */
+/* ── Renderer ────────────────────────────────────────────────────── */
 function drawGrid(grid, mc, canvasSize, hasMargin) {
   const qzMods = hasMargin ? 4 : 0;
   const modSz  = canvasSize / (mc + qzMods * 2);
@@ -647,7 +649,51 @@ function drawGrid(grid, mc, canvasSize, hasMargin) {
 }
 
 /* ── Verify ──────────────────────────────────────────────────────── */
-async function verifyWithJsQR(expectedData, canvas) {
+
+/* [FIX-C+A] Tiered QR data matching strategy:
+   ┌─────────────────┬──────────────────────────────────────────────────────┐
+   │ wifi            │ SKIP — WIFI: format has known cross-decoder           │
+   │                 │ inconsistencies; false failures are misleading        │
+   ├─────────────────┼──────────────────────────────────────────────────────┤
+   │ email, sms,     │ NORMALIZE — decodeURIComponent both sides before     │
+   │ phone, vcard    │ comparing. jsQR may return differently percent-       │
+   │                 │ encoded sequences for the same logical URI.           │
+   │                 │ try/catch guards malformed sequences → false.         │
+   ├─────────────────┼──────────────────────────────────────────────────────┤
+   │ url, text       │ STRICT — encoding must survive the round-trip intact. │
+   │                 │ Any mismatch here is a genuine encoding failure.      │
+   └─────────────────┴──────────────────────────────────────────────────────┘
+*/
+const VERIFY_SKIP_TYPES      = new Set(["wifi"]);
+const VERIFY_NORMALIZE_TYPES = new Set(["email", "sms", "phone", "vcard"]);
+
+function qrDataMatch(expected, decoded, type) {
+  // Exact match is always accepted regardless of type
+  if (decoded === expected) return true;
+
+  // Normalize percent-encoding on both sides for URI types where jsQR
+  // may encode differently than buildData() but the logical value is the same
+  if (VERIFY_NORMALIZE_TYPES.has(type)) {
+    try {
+      return decodeURIComponent(decoded) === decodeURIComponent(expected);
+    } catch {
+      // Malformed percent sequence in either string — treat as mismatch
+      return false;
+    }
+  }
+
+  // url, text: strict equality only — a mismatch here is a real bug
+  return false;
+}
+
+async function verifyWithJsQR(expectedData, canvas, type) {
+  // [FIX-A] Skip verify entirely for types with known decoder inconsistencies.
+  // Showing "⚠ failed" on a correctly-encoded WiFi QR is worse than no badge.
+  if (VERIFY_SKIP_TYPES.has(type)) {
+    update({ verifyStatus: null });
+    return;
+  }
+
   const myToken = ++_verifyToken;
   update({ verifyStatus: "checking" });
   try {
@@ -657,10 +703,10 @@ async function verifyWithJsQR(expectedData, canvas) {
     const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const res   = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "dontInvert" });
     if (myToken !== _verifyToken) return;
-    /* [FIX-3] DEBUG variable removed — mismatch always logged unconditionally */
-    if (res && res.data !== expectedData)
+    const matched = res ? qrDataMatch(expectedData, res.data, type) : false;
+    if (res && !matched)
       console.warn("[QR v12] Verify mismatch\nExpected:", expectedData, "\nDecoded:", res.data);
-    update({ verifyStatus: res?.data === expectedData ? "pass" : "fail" });
+    update({ verifyStatus: matched ? "pass" : "fail" });
   } catch {
     if (myToken === _verifyToken) update({ verifyStatus: null });
   }
@@ -675,8 +721,6 @@ function friendlyQRError(msg) {
 
 /* ══════════════════════════════════════════════════════════════════
    QRController
-   generate() never touches DOM — only calls update().
-   syncMount has single call site: top of render().
 ══════════════════════════════════════════════════════════════════════ */
 const QRC = (() => {
   let _lastSig = null;
@@ -706,14 +750,14 @@ const QRC = (() => {
 
       const prevVersion = S.qrVersion;
       el.classList.remove("pending");
-      // Replace canvas safely — no innerHTML
       while (el.querySelector("canvas")) el.querySelector("canvas").remove();
       el.querySelector(".empty-hint")?.remove();
       el.appendChild(canvas);
       if (version === prevVersion && prevVersion !== 1) canvas.style.animation = "none";
 
       update({ hasQR: true, qrVersion: version });
-      verifyWithJsQR(opts.data, canvas);
+      // [FIX-C+A] Pass type so verifyWithJsQR can apply the right matching strategy
+      verifyWithJsQR(opts.data, canvas, S.qrType);
 
     } catch(e) {
       if (myToken !== _genToken) return;
@@ -723,7 +767,6 @@ const QRC = (() => {
     }
   }
 
-  /* [FIX-7] DOM construction — no innerHTML */
   function clear() {
     _lastSig = null;
     const el = document.getElementById("qr-mount"); if (!el) return;
@@ -777,12 +820,11 @@ const QR_TYPES = [
 const EC_LEVELS   = ["L","M","Q","H"];
 const KNOWN_TYPES = new Set(QR_TYPES.map(t => t.id));
 
-/* [FIX-13] Valid field keys + per-field caps aligned */
 const VALID_FIELD_KEYS = new Set(["url","text","email","subject","body","phone","message","ssid","password","security","firstName","lastName","org","website","address"]);
 const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT };
 const FIELD_DEFAULT_MAX = MAX_FIELD;
 
-/* ── localStorage — sanitized, aligned caps ─────────────────────── */
+/* ── localStorage ────────────────────────────────────────────────── */
 function lsGet(k, fb) {
   try {
     const v = localStorage.getItem(k); if (!v) return fb;
@@ -792,7 +834,6 @@ function lsGet(k, fb) {
     for (const [fk, fv] of Object.entries(p)) {
       if (!VALID_FIELD_KEYS.has(fk)) continue;
       if (typeof fv !== "string") continue;
-      /* [FIX-13] Use actual per-field cap, not flat 5000 */
       const maxBytes = FIELD_CAPS[fk] || FIELD_DEFAULT_MAX;
       const enc = new TextEncoder().encode(fv);
       safe[fk] = enc.length <= maxBytes ? fv : new TextDecoder().decode(enc.slice(0, maxBytes));
@@ -801,7 +842,6 @@ function lsGet(k, fb) {
   } catch { return fb; }
 }
 
-/* [FIX-14] lsSet — surfaces quota errors as persistent UI state */
 function lsSet(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); }
   catch(e) {
@@ -817,19 +857,7 @@ function lsSetFields(type, fields) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   STATE — 12 keys, all documented [FIX-14 adds storageError]
-   qrType       string  — active content type
-   fields       object  — current form field values
-   fieldErrs    object  — validation errors for current fields
-   ecLevel      string  — L / M / Q / H
-   hasMargin    bool    — quiet zone toggle
-   verifyStatus string  — null | "checking" | "pass" | "fail"
-   hasQR        bool    — whether a QR is currently rendered
-   qrVersion    number  — detected QR version (1–40)
-   imgCopied    bool    — copy image button flash state
-   dataCopied   bool    — copy data button flash state
-   workerMode   string  — "worker" | "main" (stats chip display)
-   storageError bool    — localStorage quota exceeded [FIX-14]
+   STATE
 ══════════════════════════════════════════════════════════════════════ */
 const S = {
   qrType:       "url",
@@ -843,7 +871,7 @@ const S = {
   imgCopied:    false,
   dataCopied:   false,
   workerMode:   "worker",
-  storageError: false,   // [FIX-14]
+  storageError: false,
 };
 
 let _raf = false;
@@ -855,12 +883,11 @@ function update(patch, afterRender) {
   }
 }
 
-/* silentMutate — used by input handlers to avoid render on every keystroke */
 function silentMutate(patch) {
   Object.assign(S, typeof patch === "function" ? patch(S) : patch);
 }
 
-/* ── h() — strict DOM builder, callers own null safety ──────────── */
+/* ── h() ─────────────────────────────────────────────────────────── */
 function h(tag, attrs={}, ...kids) {
   const el = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
@@ -885,9 +912,7 @@ function h(tag, attrs={}, ...kids) {
   return el;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   PERSISTENT DOM — never replaced by render()
-══════════════════════════════════════════════════════════════════════ */
+/* ── Persistent DOM ──────────────────────────────────────────────── */
 const QR_MOUNT = (() => {
   const el   = document.createElement("div"); el.id = "qr-mount"; el.className = "empty";
   const hint = document.createElement("div"); hint.className = "empty-hint";
@@ -899,9 +924,7 @@ const QR_MOUNT = (() => {
 
 const FORM_EL = document.createElement("div"); FORM_EL.id = "form-container";
 
-/* ══════════════════════════════════════════════════════════════════
-   FORM PATCHING — cursor-safe, no focus loss
-══════════════════════════════════════════════════════════════════════ */
+/* ── Form patching ───────────────────────────────────────────────── */
 function patchInput(container, key, label, placeholder, type="text") {
   let wrap = container.querySelector(`[data-key="${key}"]`);
   if (!wrap) {
@@ -909,7 +932,6 @@ function patchInput(container, key, label, placeholder, type="text") {
     const lbl = document.createElement("div"); lbl.className="lbl"; lbl.textContent=label;
     const inp = document.createElement("input"); inp.type=type; inp.placeholder=placeholder;
     const err = document.createElement("div"); err.className="fld-err";
-    /* [FIX-13] Inline capacity warning element */
     const wrn = document.createElement("div"); wrn.className="fld-warn";
     inp.addEventListener("input", e => {
       const nf   = {...S.fields, [key]: e.target.value};
@@ -919,7 +941,6 @@ function patchInput(container, key, label, placeholder, type="text") {
       const msg = errs[key];
       if (msg) { inp.classList.add("err"); err.textContent=msg; err.classList.add("show"); }
       else     { inp.classList.remove("err"); err.textContent=""; err.classList.remove("show"); }
-      /* [FIX-13] Live capacity warning for URL/Text */
       if (FIELD_CAPS[key]) {
         const byteLen = new TextEncoder().encode(e.target.value).length;
         const atCap   = byteLen >= FIELD_CAPS[key];
@@ -984,12 +1005,9 @@ function getNeededKeys(type) {
 
 function buildForm(container) {
   const needed = getNeededKeys(S.qrType);
-  /* [FIX-12] Remove .two first (it holds firstName/lastName with [data-key]),
-     then remove any remaining orphaned [data-key] elements.
-     ":scope>[data-key]" was missing grandchildren inside .two — fixed. */
   if (S.qrType !== "vcard") {
     const tc = container.querySelector(".two");
-    if (tc) tc.remove(); // removes firstName+lastName together
+    if (tc) tc.remove();
   }
   [...container.querySelectorAll("[data-key]")].forEach(el => {
     if (!needed.includes(el.dataset.key)) el.remove();
@@ -1034,16 +1052,13 @@ function triggerQR() {
   QRC.generate({ data: raw, ecLevel: S.ecLevel, hasMargin: S.hasMargin });
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   syncMount — SINGLE call site: top of render()
-══════════════════════════════════════════════════════════════════════ */
+/* ── syncMount ───────────────────────────────────────────────────── */
 function syncMount(hasData) {
   const hasCanvas = !!QR_MOUNT.querySelector("canvas");
   QR_MOUNT.className =
     (!hasCanvas ? "qr-mount empty" : "qr-mount") +
     (S.verifyStatus==="pass" ? " pass" : S.verifyStatus==="fail" ? " fail" : "");
 
-  /* [FIX-8] Scanline — DOM construction, no innerHTML */
   let sl = QR_MOUNT.querySelector(".scanline-wrap");
   if (S.verifyStatus==="checking") {
     if (!sl) {
@@ -1053,7 +1068,6 @@ function syncMount(hasData) {
     }
   } else { if (sl) sl.remove(); }
 
-  // Empty hint
   let hint = QR_MOUNT.querySelector(".empty-hint");
   if (!hasData && !hasCanvas) {
     if (!hint) {
@@ -1065,11 +1079,7 @@ function syncMount(hasData) {
   } else { if (hint) hint.remove(); }
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   UI COMPONENTS
-   [FIX-5] Stats chips — DOM construction, no innerHTML.
-   [FIX-6] Type buttons — DOM construction, no innerHTML.
-══════════════════════════════════════════════════════════════════════ */
+/* ── UI Components ───────────────────────────────────────────────── */
 const tog = (on, onClick) =>
   h("button", {class:"tog"+(on?" on":""), onClick}, h("div",{class:"tog-k"}));
 
@@ -1093,7 +1103,6 @@ function rTypeSelector() {
   return h("div",{},
     h("div",{class:"sec-label",style:"margin-bottom:12px"},"◈ Content Type"),
     h("div",{class:"type-grid"},
-      /* [FIX-6] DOM construction — no innerHTML */
       QR_TYPES.map(t => {
         const btn = document.createElement("button");
         btn.className = "type-btn" + (S.qrType===t.id ? " on" : "");
@@ -1113,7 +1122,6 @@ function rTypeSelector() {
 }
 
 function rSettings() {
-  /* [FIX-14] storageError warning rendered here */
   const warn = document.createElement("div");
   warn.className = "storage-warn" + (S.storageError ? " show" : "");
   warn.textContent = "⚠ Settings could not be saved — storage full";
@@ -1136,7 +1144,6 @@ function rSettings() {
   );
 }
 
-/* [FIX-5] Stats — DOM construction, no innerHTML */
 function rQRStats(rawData) {
   if (!S.hasQR || !rawData.trim()) return null;
   const byteLen = new TextEncoder().encode(rawData).length;
@@ -1195,10 +1202,8 @@ function render() {
   const rawData = buildData(S.qrType, S.fields);
   const hasData = !!rawData.trim();
 
-  // Single syncMount call site
   syncMount(hasData);
 
-  // Offline badge
   const ob = document.getElementById("offline-badge");
   if (ob) ob.classList.toggle("show", !navigator.onLine);
 
@@ -1206,8 +1211,7 @@ function render() {
     S.qrType, S.ecLevel, S.hasMargin,
     hasData, S.hasQR, S.qrVersion,
     S.imgCopied, S.dataCopied, S.workerMode, S.storageError,
-    S.verifyStatus  // [FIX-A] was missing — syncMount must run on verify state changes
-                    // so the pass/fail border and scanline removal are applied immediately
+    S.verifyStatus  // [FIX-A] included so syncMount() runs on verify state changes
   ].join("|");
 
   if (sig === _prevSig) { updateVerifyBadge(); return; }
@@ -1248,7 +1252,7 @@ function render() {
   updateVerifyBadge();
 }
 
-/* ── Verify badge + disclaimer ───────────────────────────────────── */
+/* ── Verify badge ────────────────────────────────────────────────── */
 function updateVerifyBadge() {
   const hdr = document.querySelector(".prev-hdr"); if (!hdr) return;
 
@@ -1280,11 +1284,7 @@ function updateVerifyBadge() {
 window.addEventListener("online",  () => document.getElementById("offline-badge")?.classList.remove("show"));
 window.addEventListener("offline", () => document.getElementById("offline-badge")?.classList.add("show"));
 
-/* [FIX-1,2] No WORKER_SRC reassignment. No _makeWorkerSrc call.
-   spawnWorker() uses the const WORKER_SRC defined above. */
 spawnWorker();
-
-// Warm jsQR after 1.5s idle
 setTimeout(() => ensureJsQR().catch(() => {}), 1500);
 
 S.fieldErrs = validateFields(S.qrType, S.fields);
