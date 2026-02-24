@@ -627,11 +627,16 @@ function buildData(type, f) {
 
 /* ── Renderer ────────────────────────────────────────────────────── */
 function drawGrid(grid, mc, canvasSize, hasMargin) {
-  const qzMods = hasMargin ? 4 : 0;
-  const modSz  = canvasSize / (mc + qzMods * 2);
-  const offset = qzMods * modSz;
-  const canvas  = document.createElement("canvas");
-  canvas.width = canvas.height = canvasSize;
+  const qzMods    = hasMargin ? 4 : 0;
+  const totalMods = mc + qzMods * 2;
+  // Snap canvas to nearest integer multiple of totalMods so every module
+  // lands on exact pixel boundaries — eliminates sub-pixel anti-aliasing
+  // that causes jsQR to misread format-info bits for certain EC levels.
+  const snapped   = Math.ceil(canvasSize / totalMods) * totalMods;
+  const modSz     = snapped / totalMods;   // guaranteed integer
+  const offset    = qzMods * modSz;
+  const canvas    = document.createElement("canvas");
+  canvas.width = canvas.height = snapped;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,canvasSize,canvasSize);
   ctx.fillStyle = "#000000";
@@ -693,7 +698,7 @@ async function verifyWithJsQR(expectedData, canvas, type) {
     if (myToken !== _verifyToken) return;
     const ctx   = canvas.getContext("2d", { willReadFrequently: true });
     const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const res   = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "dontInvert" });
+    const res   = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "attemptBoth" });
     if (myToken !== _verifyToken) return;
     const matched = res ? qrDataMatch(expectedData, res.data, type) : false;
     if (res && !matched)
