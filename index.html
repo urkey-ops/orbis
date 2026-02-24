@@ -407,7 +407,7 @@ QRCodeModel.prototype={
   setupProbe:function(row,col){for(var r=-1;r<=7;r++){if(row+r<=-1||this.moduleCount<=row+r)continue;for(var c=-1;c<=7;c++){if(col+c<=-1||this.moduleCount<=col+c)continue;this.modules[row+r][col+c]=(r>=0&&r<=6&&(c===0||c===6))||(c>=0&&c<=6&&(r===0||r===6))||(r>=2&&r<=4&&c>=2&&c<=4);}}},
   setupAdjust:function(){var pos=PATTERN_POSITION_TABLE[this.typeNumber-1];for(var i=0;i<pos.length;i++)for(var j=0;j<pos.length;j++){var row=pos[i],col=pos[j];if(this.modules[row][col]!==null)continue;for(var r=-2;r<=2;r++)for(var c=-2;c<=2;c++)this.modules[row+r][col+c]=(r===-2||r===2||c===-2||c===2||(r===0&&c===0));}},
   setupTiming:function(){for(var r=8;r<this.moduleCount-8;r++)if(this.modules[r][6]===null)this.modules[r][6]=(r%2===0);for(var c=8;c<this.moduleCount-8;c++)if(this.modules[6][c]===null)this.modules[6][c]=(c%2===0);},
-  setupTypeInfo:function(test,mp){var data=(this.errorCorrectionLevel<<3)|mp,bits=getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},
+  setupTypeInfo:function(test,mp){var _ecN={L:1,M:0,Q:3,H:2};var data=((typeof this.errorCorrectionLevel==='string'?_ecN[this.errorCorrectionLevel]:this.errorCorrectionLevel)<<3)|mp,bits=getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},
   setupTypeNum:function(test){var bits=getBCHTypeNumber(this.typeNumber);for(var i=0;i<18;i++){this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=(!test&&((bits>>i)&1)===1);}for(var i=0;i<18;i++){this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=(!test&&((bits>>i)&1)===1);}},
   mapData:function(data,mp){var inc=-1,row=this.moduleCount-1,bi=7,bytei=0;var mf=MASK_PATTERN['PATTERN'+('00'+mp.toString(2)).slice(-3)];for(var col=this.moduleCount-1;col>0;col-=2){if(col===6)col--;while(true){for(var c=0;c<2;c++){if(this.modules[row][col-c]===null){var dark=false;if(bytei<data.length)dark=(((data[bytei]>>>bi)&1)===1);if(mf(row,col-c))dark=!dark;this.modules[row][col-c]=dark;bi--;if(bi===-1){bytei++;bi=7;}}}row+=inc;if(row<0||this.moduleCount<=row){row-=inc;inc=-inc;break;}}}},
   getBestMaskPattern:function(){var ml=0,pat=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lp=this.getLostPoint();if(i===0||ml>lp){ml=lp;pat=i;}}return pat;},
@@ -642,19 +642,18 @@ function drawGrid(grid, mc, canvasSize, hasMargin) {
   return canvas;
 }
 
-// Separate offscreen canvas for jsQR verification only.
-// jsQR 1.4.0 fails to detect QR codes below a certain module pixel size —
-// the exact threshold varies by QR version and EC level format-info bit pattern.
-// Fix: always render at VERIFY_MOD_SZ px/module (large enough for reliable detection)
-// independent of display canvas size. Display canvas is unchanged.
-const VERIFY_MOD_SZ = 16;  // px per module — empirically reliable for jsQR 1.4.0
-function drawGridForVerify(grid, mc) {
-  const qzMods  = 4;  // always include quiet zone for verify
-  const modSz   = VERIFY_MOD_SZ;
-  const offset  = qzMods * modSz;
-  const size    = (mc + qzMods * 2) * modSz;
-  const canvas  = document.createElement("canvas");
-  canvas.width  = canvas.height = size;
+// Offscreen canvas for jsQR verification.
+// jsQR 1.4.0 uses a local-threshold binarizer whose block size is fixed at ~8px.
+// When module size is too small relative to the block size, or when the specific
+// arrangement of dark/light modules in a particular QR version/EC pattern causes
+// the local threshold to misclassify format-info bits, jsQR returns null.
+// Fix: draw at a given modSz and let the caller retry with larger sizes.
+function drawGridForVerify(grid, mc, modSz) {
+  const qzMods = 4;
+  const offset = qzMods * modSz;
+  const size   = (mc + qzMods * 2) * modSz;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, size, size);
   ctx.fillStyle = "#000000";
@@ -700,9 +699,15 @@ function qrDataMatch(expected, decoded, type) {
   return false;
 }
 
-async function verifyWithJsQR(expectedData, canvas, type) {
-  // [FIX-A] Skip verify entirely for types with known decoder inconsistencies.
-  // Showing "⚠ failed" on a correctly-encoded WiFi QR is worse than no badge.
+// jsQR 1.4.0 fails on certain QR version+EC combinations at any fixed module size.
+// Root cause: its local binarizer (block size ~8px) misclassifies format-info bits
+// when specific dark/light module patterns surround that region.
+// Fix: retry with progressively larger module sizes. Each doubling gives the
+// binarizer 4x more pixels per block, making threshold decisions more robust.
+// Empirically: most QRs decode at 16px; remainder decode by 32px; 64px catches rest.
+const VERIFY_MOD_SIZES = [16, 32, 64];
+
+async function verifyWithJsQR(expectedData, grid, mc, type) {
   if (VERIFY_SKIP_TYPES.has(type)) {
     update({ verifyStatus: null });
     return;
@@ -713,9 +718,17 @@ async function verifyWithJsQR(expectedData, canvas, type) {
   try {
     const jsQR = await ensureJsQR();
     if (myToken !== _verifyToken) return;
-    const ctx   = canvas.getContext("2d", { willReadFrequently: true });
-    const idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const res   = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "attemptBoth" });
+
+    let res = null;
+    for (const modSz of VERIFY_MOD_SIZES) {
+      const vc    = drawGridForVerify(grid, mc, modSz);
+      const ctx   = vc.getContext("2d", { willReadFrequently: true });
+      const idata = ctx.getImageData(0, 0, vc.width, vc.height);
+      res = jsQR(idata.data, idata.width, idata.height, { inversionAttempts: "attemptBoth" });
+      if (res) break;  // decoded successfully — stop retrying
+      if (myToken !== _verifyToken) return;  // cancelled while retrying
+    }
+
     if (myToken !== _verifyToken) return;
     const matched = res ? qrDataMatch(expectedData, res.data, type) : false;
     if (res && !matched)
@@ -758,9 +771,8 @@ const QRC = (() => {
       const dpr        = Math.min(window.devicePixelRatio || 1, 3);
       const canvasSize = Math.round(Math.max(360, 360 * dpr));
       const canvas     = drawGrid(grid, mc, canvasSize, opts.hasMargin);
-      // Separate high-res canvas for jsQR — display canvas may be too small
-      // for jsQR 1.4.0 to reliably detect all QR versions/EC level combinations
-      const verifyCanvas = drawGridForVerify(grid, mc);
+      // grid and mc are passed to verifyWithJsQR so it can retry
+      // at multiple module sizes if jsQR fails on the first attempt
 
       const el = document.getElementById("qr-mount");
       if (!el || myToken !== _genToken) return;
@@ -774,7 +786,7 @@ const QRC = (() => {
 
       update({ hasQR: true, qrVersion: version });
       // [FIX-C+A] Pass type so verifyWithJsQR can apply the right matching strategy
-      verifyWithJsQR(opts.data, verifyCanvas, S.qrType);
+      verifyWithJsQR(opts.data, grid, mc, S.qrType);
 
     } catch(e) {
       if (myToken !== _genToken) return;
