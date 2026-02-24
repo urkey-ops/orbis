@@ -240,25 +240,25 @@ function QM2(tn,ec){this.typeNumber=tn;this.errorCorrectionLevel=ec;this.modules
 QM2.prototype={addData:function(d){this.dataList.push(new Q8B(d));this.dataCache=null;},isDark:function(r,c){return this.modules[r][c];},getModuleCount:function(){return this.moduleCount;},make:function(){if(this.typeNumber<1){var tn=1;for(;tn<40;tn++){var rsb=QB.getRSBlocks(tn,this.errorCorrectionLevel),buf=new QBB(),tdc=0;for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;for(var i=0;i<this.dataList.length;i++){var d=this.dataList[i];buf.put(d.mode,4);buf.put(d.getLength(),d.getLengthInBits(tn));d.write(buf);}if(buf.getLengthInBits()<=tdc*8)break;}this.typeNumber=tn;}this.makeImpl(false,this.getBestMaskPattern());},makeImpl:function(test,mp){this.moduleCount=this.typeNumber*4+17;this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var c=0;c<this.moduleCount;c++)this.modules[r][c]=null;}this.setupProbe(0,0);this.setupProbe(this.moduleCount-7,0);this.setupProbe(0,this.moduleCount-7);this.setupAdjust();this.setupTiming();this.setupTypeInfo(test,mp);if(this.typeNumber>=7)this.setupTypeNum(test);if(this.dataCache==null)this.dataCache=CD(this.typeNumber,this.errorCorrectionLevel,this.dataList);this.mapData(this.dataCache,mp);},setupProbe:function(row,col){for(var r=-1;r<=7;r++){if(row+r<=-1||this.moduleCount<=row+r)continue;for(var c=-1;c<=7;c++){if(col+c<=-1||this.moduleCount<=col+c)continue;this.modules[row+r][col+c]=(r>=0&&r<=6&&(c===0||c===6))||(c>=0&&c<=6&&(r===0||r===6))||(r>=2&&r<=4&&c>=2&&c<=4);}}},setupAdjust:function(){var pos=PP[this.typeNumber-1];for(var i=0;i<pos.length;i++)for(var j=0;j<pos.length;j++){var row=pos[i],col=pos[j];if(this.modules[row][col]!==null)continue;for(var r=-2;r<=2;r++)for(var c=-2;c<=2;c++)this.modules[row+r][col+c]=(r===-2||r===2||c===-2||c===2||(r===0&&c===0));}},setupTiming:function(){for(var r=8;r<this.moduleCount-8;r++)if(this.modules[r][6]===null)this.modules[r][6]=(r%2===0);for(var c=8;c<this.moduleCount-8;c++)if(this.modules[6][c]===null)this.modules[6][c]=(c%2===0);},setupTypeInfo:function(test,mp){var data=(this.errorCorrectionLevel<<3)|mp,bits=BTI(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},setupTypeNum:function(test){var bits=BTN(this.typeNumber);for(var i=0;i<18;i++){this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=(!test&&((bits>>i)&1)===1);}for(var i=0;i<18;i++){this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=(!test&&((bits>>i)&1)===1);}},mapData:function(data,mp){var inc=-1,row=this.moduleCount-1,bi=7,bytei=0;var mf=MP['PATTERN'+('00'+mp.toString(2)).slice(-3)];for(var col=this.moduleCount-1;col>0;col-=2){if(col===6)col--;while(true){for(var c=0;c<2;c++){if(this.modules[row][col-c]===null){var dark=false;if(bytei<data.length)dark=(((data[bytei]>>>bi)&1)===1);if(mf(row,col-c))dark=!dark;this.modules[row][col-c]=dark;bi--;if(bi===-1){bytei++;bi=7;}}}row+=inc;if(row<0||this.moduleCount<=row){row-=inc;inc=-inc;break;}}}},getBestMaskPattern:function(){var ml=0,pat=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lp=this.getLostPoint();if(i===0||ml>lp){ml=lp;pat=i;}}return pat;},getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++){var sc=0,dark=this.isDark(r,c);for(var dr=-1;dr<=1;dr++){if(r+dr<0||mc<=r+dr)continue;for(var dc2=-1;dc2<=1;dc2++){if(c+dc2<0||mc<=c+dc2)continue;if(dr===0&&dc2===0)continue;if(dark===this.isDark(r+dr,c+dc2))sc++;}}if(sc>5)lp+=(3+sc-5);}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++)if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++)if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;var dc=0;for(var c=0;c<mc;c++)for(var r=0;r<mc;r++)if(this.isDark(r,c))dc++;lp+=Math.abs(100*dc/mc/mc-50)/5*10;return lp;}};
 self._makeQR=function(payload,ec){var qr=new QM2(-1,ec);qr.addData(payload);qr.make();var mc=qr.getModuleCount(),version=(mc-17)/4,grid=new Uint8Array(mc*mc);for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(qr.isDark(r,c))grid[r*mc+c]=1;return{grid:grid,mc:mc,version:version};};`;
 
-/* [V12-1] Load algorithm into main thread via blob <script> — no eval, no unsafe-eval CSP */
+/* [V12-1] Load algorithm into main thread via blob <script> — no eval, no unsafe-eval CSP.
+   We cannot use top-level await in a classic script, so we:
+   1. Create the algo blob URL
+   2. Inject a <script src=blobUrl> tag
+   3. Boot the entire app from that script's onload callback
+   All code below that depends on _makeQR is wrapped in boot() which fires after load. */
 const _algoBlobUrl = URL.createObjectURL(new Blob([ALGO_SRC], { type:"text/javascript" }));
-await new Promise((res, rej) => {
-  const s = document.createElement("script");
-  s.src = _algoBlobUrl;
-  s.onload = res;
-  s.onerror = () => rej(new Error("algo blob failed"));
-  document.head.appendChild(s);
-});
-/* window._makeQR is now available via self._makeQR = ... in ALGO_SRC */
 
-/* [V12-1] Worker uses importScripts(algoBlobUrl) — same ALGO_SRC, no duplication */
-const WORKER_SRC = `"use strict";
-importScripts('${_algoBlobUrl}');
-self.onmessage=function(e){
-  var id=e.data.id,payload=e.data.payload,ec=e.data.ec;
-  try{var r=self._makeQR(payload,ec);self.postMessage({id:id,ok:true,grid:r.grid,mc:r.mc,version:r.version},[r.grid.buffer]);}
-  catch(err){self.postMessage({id:id,ok:false,error:err.message});}
-};`;
+function _makeWorkerSrc(algoBlobUrl) {
+  return '"use strict";\n'
+    + "importScripts('" + algoBlobUrl + "');\n"
+    + "self.onmessage=function(e){\n"
+    + "  var id=e.data.id,payload=e.data.payload,ec=e.data.ec;\n"
+    + "  try{var r=self._makeQR(payload,ec);self.postMessage({id:id,ok:true,grid:r.grid,mc:r.mc,version:r.version},[r.grid.buffer]);}\n"
+    + "  catch(err){self.postMessage({id:id,ok:false,error:err.message});}\n"
+    + "};";
+}
+/* WORKER_SRC built in boot() after _algoBlobUrl is ready */
+let WORKER_SRC = "";
 
 /* ── Worker lifecycle with backoff respawn ── */
 let _worker=null,_workerFailCount=0,_workerPermanent=false;
@@ -801,17 +801,36 @@ function triggerQR(){
   QRC.generate({data:raw,ecLevel:S.ecLevel,hasMargin:S.hasMargin});
 }
 
-/* ── Boot ── */
-window.addEventListener("online",()=>document.getElementById("offline-badge")?.classList.remove("show"));
-window.addEventListener("offline",()=>document.getElementById("offline-badge")?.classList.add("show"));
+/* ── Boot — called after algo blob script loads ── */
+function boot(){
+  WORKER_SRC = _makeWorkerSrc(_algoBlobUrl);
 
-spawnWorker();
-setTimeout(()=>ensureJsQR().catch(()=>{}),1500);
+  window.addEventListener("online",()=>document.getElementById("offline-badge")?.classList.remove("show"));
+  window.addEventListener("offline",()=>document.getElementById("offline-badge")?.classList.add("show"));
 
-S.fieldErrs=validateFields(S.qrType,S.fields);
-renderIslands();
-buildForm();
-if(Object.keys(S.fields).length>0)triggerQR();
+  spawnWorker();
+  setTimeout(()=>ensureJsQR().catch(()=>{}),1500);
+
+  S.fieldErrs=validateFields(S.qrType,S.fields);
+  renderIslands();
+  buildForm();
+  if(Object.keys(S.fields).length>0)triggerQR();
+}
+
+/* Inject algo blob as a <script> tag — onload fires boot().
+   Falls back to main-thread-only mode if blob injection fails. */
+(function(){
+  const s=document.createElement("script");
+  s.src=_algoBlobUrl;
+  s.onload=boot;
+  s.onerror=function(){
+    /* Blob script injection failed — algo unavailable, show error */
+    console.error("[QR v12] Algo blob load failed");
+    document.getElementById("qr-mount").innerHTML=
+      '<div class="empty-hint"><div class="big">⚠</div><div class="txt">Failed to initialise engine</div></div>';
+  };
+  document.head.appendChild(s);
+})();
 </script>
 </body>
 </html>
