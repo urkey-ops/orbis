@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>QR_studio v13</title>
+<title>QR_studio v14</title>
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
            script-src 'unsafe-inline' https://cdn.jsdelivr.net;
@@ -82,7 +82,7 @@ header{border-bottom:1px solid var(--bord);padding:0 24px;height:56px;display:fl
 .logo-name span{color:var(--a)}
 .hdr-badges{display:flex;gap:6px;margin-left:auto}
 .hdr-badge{font-family:'Space Mono',monospace;font-size:9px;padding:3px 7px;border-radius:4px;border:1px solid var(--bord);color:var(--mut);letter-spacing:.05em}
-.hdr-badge.v13{border-color:rgba(184,244,0,.3);color:var(--a);background:var(--a10)}
+.hdr-badge.v14{border-color:rgba(184,244,0,.3);color:var(--a);background:var(--a10)}
 .offline-badge{font-family:'Space Mono',monospace;font-size:9px;padding:3px 7px;border-radius:4px;border:1px solid rgba(255,160,64,.3);color:var(--warn);background:rgba(255,160,64,.08);display:none}
 .offline-badge.show{display:block}
 
@@ -180,9 +180,19 @@ header{border-bottom:1px solid var(--bord);padding:0 24px;height:56px;display:fl
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 1 — QR ALGORITHM (inline, no eval needed)
    Also exported as QR_ALGO_SRC string for the Web Worker blob.
+
+   ⚠ MAINTENANCE NOTE (v14):
+   The algorithm is intentionally duplicated here and in QR_ALGO_SRC
+   below. This is required because:
+     1. The single-file constraint rules out a separate worker .js file.
+     2. CSP lacks 'unsafe-eval' so new Function() is blocked.
+     3. Function.prototype.toString() misses static methods and
+        prototype assignments, making auto-reconstruction fragile.
+   A drift detector runs at boot (see checkAlgoParity) and will log
+   a loud console error if the two copies ever diverge.
+   When editing the algorithm, update BOTH copies.
 ═══════════════════════════════════════════════════════════════════ */
 
-// ── Algorithm implementation (runs directly in main thread) ──────
 const RS_BLOCK_TABLE = [
   [1,26,19],[1,26,16],[1,26,13],[1,26,9],
   [1,44,34],[1,44,28],[1,44,22],[1,44,16],
@@ -299,7 +309,6 @@ QRCodeModel.prototype={
   getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++){for(var c=0;c<mc;c++){var smc=0;for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(dr===0&&dc===0)continue;if((r+dr)>=0&&(r+dr)<mc&&(c+dc)>=0&&(c+dc)<mc&&this.isDark(r+dr,c+dc)===this.isDark(r,c))smc++;}if(smc>5)lp+=(smc-5)+3;}}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++){if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;}for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++){if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;}var dk=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(this.isDark(r,c))dk++;var rt=Math.abs(100*dk/mc/mc-50)/5;lp+=rt*10;return lp}
 };
 
-// makeQR is used both in main thread and in the worker
 function makeQR(payload,ec){
   var qr=new QRCodeModel(-1,ec);
   qr.addData(payload);qr.make();
@@ -312,7 +321,7 @@ function makeQR(payload,ec){
 /* ═══════════════════════════════════════════════════════════════════
    QR_ALGO_SRC — string copy for the Worker blob ONLY.
    The main thread uses the functions defined above directly.
-   No eval() anywhere.
+   See maintenance note at top of Section 1.
 ═══════════════════════════════════════════════════════════════════ */
 const QR_ALGO_SRC = `
 "use strict";
@@ -467,6 +476,9 @@ const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
 
 const QR_CAP = {
+  // Byte-mode capacity per version per EC level.
+  // Display only — actual enforcement is by the algorithm.
+  // Must stay in sync with RS_BLOCK_TABLE above.
   L:[17,32,53,78,106,134,154,192,230,271,321,367,425,458,520,586,644,718,792,858,929,1003,1091,1171,1273,1367,1465,1528,1628,1732,1840,1952,2068,2188,2303,2431,2563,2699,2809,2953],
   M:[14,26,42,62,84,106,122,152,180,213,251,287,331,362,412,450,504,560,624,666,711,779,857,911,997,1059,1125,1190,1264,1370,1452,1538,1628,1722,1809,1911,1989,2099,2213,2331],
   Q:[11,20,32,46,60,74,86,108,130,151,177,203,241,258,292,322,364,394,442,482,509,565,611,661,715,751,805,868,908,982,1030,1112,1168,1228,1283,1351,1423,1499,1579,1663],
@@ -477,14 +489,15 @@ const VALID_FIELD_KEYS = new Set(["url","text","email","subject","body","phone",
 const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT };
 const FIELD_DEFAULT_MAX = MAX_FIELD;
 
+// FIX 3 (P3): Known valid WiFi security values — guards against stale localStorage
+const VALID_WIFI_SECURITY = new Set(["WPA","WPA2","WEP","None"]);
+
 const VERIFY_SKIP_TYPES      = new Set(["wifi"]);
 const VERIFY_NORMALIZE_TYPES = new Set(["email","sms","phone","vcard"]);
 const VERIFY_MOD_SIZES = [16, 32, 64];
 
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 3 — WORKER LIFECYCLE
-   Worker blob = QR_ALGO_SRC (which now includes the handler).
-   3 consecutive failures → permanent main-thread fallback.
 ═══════════════════════════════════════════════════════════════════ */
 let _worker = null, _workerFailCount = 0, _workerPermanent = false;
 const _pending = new Map();
@@ -533,6 +546,34 @@ function qrMainThread(payload, ec) {
     try { resolve({ ok: true, ...makeQR(payload, ec) }); }
     catch(e) { reject(e); }
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FIX 2 (P1): Algorithm drift detector.
+   Runs both copies against the same payload and compares grids
+   byte-by-byte. Fires a loud console error if they differ.
+   Zero cost in production; catches maintenance mistakes immediately.
+═══════════════════════════════════════════════════════════════════ */
+function checkAlgoParity() {
+  const TEST = "https://qrstudio-parity.test/v14";
+  try {
+    const main = makeQR(TEST, "M");
+    qrViaWorker(TEST, "M").then(w => {
+      const ok = w.ok &&
+                 main.grid.length === w.grid.length &&
+                 main.grid.every((v, i) => v === w.grid[i]);
+      if (!ok) {
+        console.error(
+          "%c[QR Studio v14] ALGORITHM DRIFT DETECTED\nWorker and main thread produce different QR grids.\nEdit QR_ALGO_SRC to match the main-thread algorithm.",
+          "background:#c00;color:#fff;padding:6px 10px;font-size:13px;line-height:1.6"
+        );
+      }
+    }).catch(() => {
+      // Worker not ready or permanent fallback — skip check silently
+    });
+  } catch(e) {
+    console.warn("[QR Studio v14] Parity check failed (main thread):", e.message);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -603,7 +644,7 @@ async function runVerify(payload, grid, mc, type, myToken) {
     if (myToken !== _verifyToken) return;
     const matched = decoded ? qrDataMatch(payload, decoded, type) : false;
     if (decoded && !matched)
-      console.warn("[QR v13] Verify mismatch\nExpected:", payload, "\nGot:", decoded);
+      console.warn("[QR v14] Verify mismatch\nExpected:", payload, "\nGot:", decoded);
     update({ verifyState: matched ? "pass" : "fail" });
   } catch {
     if (myToken === _verifyToken) update({ verifyState: "off" });
@@ -641,13 +682,17 @@ function update(patch) {
 
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 6 — DATA LAYER
+   FIX 3 (P1): lsGet no longer mutates global S directly.
+   Returns { data, stale } so callers decide what to do with
+   the stale flag. Side-effect-free getter.
 ═══════════════════════════════════════════════════════════════════ */
 function lsGet(k, fb) {
   try {
-    const v = localStorage.getItem(k); if (!v) return fb;
+    const v = localStorage.getItem(k); if (!v) return { data: fb, stale: false };
     const p = JSON.parse(v);
-    if (typeof p === "string" || typeof p === "boolean") return p;
-    if (typeof p !== "object" || p === null || Array.isArray(p)) return fb;
+    // Non-object values (strings, booleans) returned directly, no stale check needed
+    if (typeof p === "string" || typeof p === "boolean") return { data: p, stale: false };
+    if (typeof p !== "object" || p === null || Array.isArray(p)) return { data: fb, stale: false };
     const safe = {};
     let hadOversized = false;
     for (const [fk, fv] of Object.entries(p)) {
@@ -658,9 +703,8 @@ function lsGet(k, fb) {
       if (enc.length > maxBytes) { hadOversized = true; continue; }
       safe[fk] = fv;
     }
-    if (hadOversized) S.staleFields = true;
-    return safe;
-  } catch { return fb; }
+    return { data: safe, stale: hadOversized };
+  } catch { return { data: fb, stale: false }; }
 }
 
 function lsSet(k, v) {
@@ -724,7 +768,11 @@ function buildData(type, f) {
       return `sms:${vcTel(f.phone)}${msg}`;
     }
     case "phone": return `tel:${vcTel(f.phone)}`;
-    case "wifi":  return `WIFI:T:${f.security==="None"?"nopass":f.security||"WPA"};S:${wfEsc((f.ssid||"").slice(0,64))};P:${wfEsc((f.password||"").slice(0,64))};;`;
+    case "wifi": {
+      // FIX 3 (P3): Guard against stale/invalid security value from localStorage
+      const sec = VALID_WIFI_SECURITY.has(f.security) ? f.security : "WPA";
+      return `WIFI:T:${sec === "None" ? "nopass" : sec};S:${wfEsc((f.ssid||"").slice(0,64))};P:${wfEsc((f.password||"").slice(0,64))};;`;
+    }
     case "vcard": {
       const fn = [f.firstName, f.lastName].filter(Boolean).map(vcEsc).join(" ");
       return ["BEGIN:VCARD","VERSION:3.0",`FN:${fn}`,`N:${vcEsc(f.lastName||"")};${vcEsc(f.firstName||"")};;;`,`ORG:${vcEsc(f.org||"")}`,`TEL:${vcTel(f.phone)}`,`EMAIL:${(f.email||"").trim().slice(0,254)}`,`URL:${(f.website||"").trim().slice(0,MAX_URL)}`,`ADR:;;${vcEsc(f.address||"")};;;;`,"END:VCARD"].join("\n");
@@ -944,7 +992,7 @@ function renderShell() {
       h("div", { class: "logo-name" }, "QR", h("span", {}, "_"), "studio")
     ),
     h("div", { class: "hdr-badges" },
-      h("div", { class: "hdr-badge v13" }, "v13"),
+      h("div", { class: "hdr-badge v14" }, "v14"),
       h("div", { class: "hdr-badge" }, "ENCODE"),
       h("div", { class: "offline-badge", id: "offline-badge" }, "✈ offline mode")
     )
@@ -968,11 +1016,25 @@ function renderShell() {
     btn.appendChild(ico); btn.appendChild(document.createTextNode(t.label));
     btn.addEventListener("click", () => {
       if (S.qrType === t.id) return;
-      const saved = lsGet("qrs_fields_" + t.id, {});
-      const errs  = validateFields(t.id, saved);
+
+      // FIX 2 (P2): Cancel any pending debounce from the previous type's input
+      if (_qrTimer) { clearTimeout(_qrTimer); _qrTimer = null; }
+
+      const { data: saved, stale } = lsGet("qrs_fields_" + t.id, {});
+      const errs = validateFields(t.id, saved);
+
       document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("on"));
       btn.classList.add("on");
-      update({ qrType: t.id, fields: saved, fieldErrs: errs });
+
+      // FIX 1 (P0): Persist the selected type so it survives page reload
+      lsSet("qrs_type", t.id);
+
+      // FIX 3 (P1): Set staleFields explicitly from lsGet result (not as a side effect)
+      // Reset first so switching from a stale type to a clean type clears the warning
+      update({ qrType: t.id, fields: saved, fieldErrs: errs, staleFields: stale });
+
+      if (stale) toast("Some saved fields for this type were too large and were cleared", "wn");
+
       triggerQR();
     });
     typeGrid.appendChild(btn);
@@ -1141,7 +1203,11 @@ function mkSelect(key, labelTxt, options) {
   options.forEach(o => {
     const op = document.createElement("option"); op.value = o; op.textContent = o; sel.appendChild(op);
   });
-  sel.value = S.fields[key] || options[0];
+  // FIX 3 (P3): Sanitize stored security value before setting select
+  const storedVal = S.fields[key];
+  sel.value = (key === "security" && !VALID_WIFI_SECURITY.has(storedVal))
+    ? options[0]
+    : (storedVal || options[0]);
   sel.addEventListener("change", e => {
     const nf = { ...S.fields, [key]: e.target.value };
     Object.assign(S, { fields: nf });
@@ -1281,44 +1347,51 @@ function renderPreview() {
 
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 15 — BOOT
-   NO eval() — algorithm is defined directly above as regular JS.
-   The worker uses QR_ALGO_SRC (a string) for its blob, which
-   already includes the self.onmessage handler at the end.
 ═══════════════════════════════════════════════════════════════════ */
 
 // 1. Load saved settings
-S.ecLevel   = lsGet("qrs_ec", "M");
-S.hasMargin = lsGet("qrs_margin", true);
-S.qrType    = (() => { const t = lsGet("qrs_type", null); return (t && KNOWN_TYPES.has(t)) ? t : "url"; })();
-S.fields    = lsGet("qrs_fields_" + S.qrType, {});
-S.fieldErrs = validateFields(S.qrType, S.fields);
+// FIX 3 (P1): All lsGet calls now destructure {data, stale} — no side effects
+S.ecLevel   = lsGet("qrs_ec",     "M").data;
+S.hasMargin = lsGet("qrs_margin", true).data;
+S.qrType    = (() => {
+  const { data: t } = lsGet("qrs_type", null);
+  return (t && KNOWN_TYPES.has(t)) ? t : "url";
+})();
+
+const { data: _bootFields, stale: _bootStale } = lsGet("qrs_fields_" + S.qrType, {});
+S.fields     = _bootFields;
+S.staleFields = _bootStale;          // set explicitly, not as lsGet side effect
+S.fieldErrs  = validateFields(S.qrType, S.fields);
 
 // 2. Spawn worker
 spawnWorker();
 
-// 3. Render static shell (once, never again)
+// 3. Schedule drift check after worker has time to spin up
+setTimeout(checkAlgoParity, 2000);
+
+// 4. Render static shell (once, never again)
 renderShell();
 
-// 4. Render form for current type
+// 5. Render form for current type
 renderForm(S.qrType, S.fields, S.fieldErrs);
 
-// 5. Render preview (idle/empty state)
+// 6. Render preview (idle/empty state)
 renderPreview();
 
-// 6. Warm up jsQR in background
+// 7. Warm up jsQR in background
 setTimeout(() => ensureJsQR().catch(() => {}), 1500);
 
-// 7. Generate QR if saved data exists
+// 8. Generate QR if saved data exists
 const _bootPayload = buildData(S.qrType, S.fields);
 if (_bootPayload.trim()) {
   QRC.generate({ payload: _bootPayload, ecLevel: S.ecLevel, hasMargin: S.hasMargin, type: S.qrType });
 }
 
-// 8. Online/offline indicator
+// 9. Online/offline indicator
 window.addEventListener("online",  () => document.getElementById("offline-badge")?.classList.remove("show"));
 window.addEventListener("offline", () => document.getElementById("offline-badge")?.classList.add("show"));
 
-// 9. Show stale fields toast if any were discarded at load
+// 10. Show stale fields toast if any were discarded at load
 if (S.staleFields) {
   setTimeout(() => toast("Some saved fields were too large and were cleared", "wn"), 800);
 }
