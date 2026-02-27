@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>QR_studio v16</title>
+<title>QR_studio v17</title>
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'self';
            script-src 'unsafe-inline' https://cdn.jsdelivr.net;
@@ -128,7 +128,7 @@ header{border-bottom:1px solid var(--bord);padding:0 24px;height:56px;display:fl
 .logo-name span{color:var(--a)}
 .hdr-badges{display:flex;gap:6px;margin-left:auto}
 .hdr-badge{font-family:'Space Mono',monospace;font-size:9px;padding:3px 7px;border-radius:4px;border:1px solid var(--bord);color:var(--mut);letter-spacing:.05em}
-.hdr-badge.v16{border-color:rgba(184,244,0,.3);color:var(--a);background:var(--a10)}
+.hdr-badge.v17{border-color:rgba(184,244,0,.3);color:var(--a);background:var(--a10)}
 .offline-badge{font-family:'Space Mono',monospace;font-size:9px;padding:3px 7px;border-radius:4px;border:1px solid rgba(255,160,64,.3);color:var(--warn);background:rgba(255,160,64,.08);display:none}
 .offline-badge.show{display:block}
 
@@ -378,68 +378,151 @@ QRAlphanumeric.prototype={
    Greedy left-to-right: at each position try cheapest mode first.
    Minimum run thresholds prevent segment-header cost blowup.
    ---------------------------------------------------------------- */
-function makeSegments(payload){
+/* ═══════════════════════════════════════════════════════════════════
+   v17 — OPTIMAL DP SEGMENTER
+   Shortest-path dynamic programming over all N+1 character boundary
+   nodes, with exact bit-cost edge weights per version class.
+   Always ≥ as good as greedy, often 1–2 versions smaller.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Bit widths of the character-count field per mode per version class
+   (class 0 = v1–9, class 1 = v10–26, class 2 = v27–40)            */
+const MODE_LEN_BITS = {
+  1: [10, 12, 14],   // numeric
+  2: [9,  11, 13],   // alphanumeric
+  4: [8,  16, 16],   // byte
+};
+
+/* Data bytes available per version (index 0 = v1) for each EC level */
+const VERSION_DATA_BYTES = [
+  [19,16,13,9],[34,28,22,16],[55,44,34,26],[80,64,48,36],[108,86,62,46],
+  [136,108,76,60],[154,124,88,66],[192,154,110,86],[230,182,132,100],[271,216,154,122],
+  [321,254,180,140],[367,290,206,158],[425,334,244,180],[458,365,261,197],[520,415,295,223],
+  [586,453,325,253],[644,507,367,283],[718,563,397,313],[792,627,445,341],[858,669,485,385],
+  [929,714,512,406],[1003,782,568,442],[1091,860,614,464],[1171,914,664,514],[1273,1000,718,538],
+  [1367,1062,754,596],[1465,1128,808,628],[1528,1193,871,661],[1628,1267,911,701],[1732,1373,985,745],
+  [1840,1455,1033,793],[1952,1541,1115,845],[2068,1631,1171,901],[2188,1725,1231,961],
+  [2303,1812,1286,986],[2431,1914,1354,1054],[2563,1992,1426,1096],[2699,2102,1502,1142],
+  [2809,2216,1582,1222],[2953,2334,1666,1276]
+];
+const EC_IDX = {L:0,M:1,Q:2,H:3};
+
+function dpMaxDataBits(tn,ec){return(VERSION_DATA_BYTES[tn-1]||[0,0,0,0])[EC_IDX[ec]]*8;}
+
+/* Run Dijkstra-style DP on `payload` assuming version class `vc`.
+   Returns optimal segment array (alnum segs are uppercased, same as v16 greedy). */
+function dpSegments(payload, vc) {
   if(!payload||!payload.length)return[];
-  var segs=[],i=0,n=payload.length,up=payload.toUpperCase();
-  while(i<n){
+  var n=payload.length, up=payload.toUpperCase();
+  var INF=1e15;
+  var dist=new Float64Array(n+1).fill(INF);
+  var prevJ=new Int32Array(n+1).fill(-1);
+  var prevMode=new Uint8Array(n+1);
+  dist[0]=0;
+
+  for(var i=0;i<n;i++){
+    if(dist[i]===INF)continue;
+    var base=dist[i];
+
+    // ── Numeric edges ──
     var numEnd=i;
     while(numEnd<n&&payload[numEnd]>='0'&&payload[numEnd]<='9')numEnd++;
+    if(numEnd>i){
+      var h1=4+MODE_LEN_BITS[1][vc];
+      for(var j=i+1;j<=numEnd;j++){
+        var l=j-i;
+        var cost=base+h1+Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);
+        if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=1;}
+      }
+    }
+
+    // ── Alphanumeric edges ──
     var alnEnd=i;
     while(alnEnd<n&&ALNUM_MAP[up[alnEnd]]!==undefined)alnEnd++;
-    if(numEnd-i>=3){
-      segs.push(new QRNumeric(payload.substring(i,numEnd)));i=numEnd;
-    }else if(alnEnd-i>=6){
-      segs.push(new QRAlphanumeric(up.substring(i,alnEnd)));i=alnEnd;
-    }else{
-      var byteEnd=i;
-      while(byteEnd<n){
-        var nr=byteEnd;
-        while(nr<n&&payload[nr]>='0'&&payload[nr]<='9')nr++;
-        if(nr-byteEnd>=3)break;
-        var ar=byteEnd;
-        while(ar<n&&ALNUM_MAP[up[ar]]!==undefined)ar++;
-        if(ar-byteEnd>=6)break;
-        byteEnd++;
+    if(alnEnd>i){
+      var h2=4+MODE_LEN_BITS[2][vc];
+      for(var j=i+1;j<=alnEnd;j++){
+        var l=j-i;
+        var cost=base+h2+Math.floor(l/2)*11+(l%2===1?6:0);
+        if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=2;}
       }
-      if(byteEnd>i)segs.push(new QR8bitByte(payload.substring(i,byteEnd)));
-      i=byteEnd;
+    }
+
+    // ── Byte edges ──
+    var h4=4+MODE_LEN_BITS[4][vc];
+    var byteBits=h4;
+    for(var j=i;j<n;j++){
+      var cp=payload.codePointAt(j);
+      byteBits+=(cp>0x7FF?(cp>0xFFFF?4:3):(cp>0x7F?2:1))*8;
+      var cost=base+byteBits;
+      if(cost<dist[j+1]){dist[j+1]=cost;prevJ[j+1]=i;prevMode[j+1]=4;}
+      if(cp>0xFFFF)j++;
     }
   }
-  return segs;
-}
 
-/* ─── URL-aware segment builder ──────────────────────────────────
-   Scheme + authority are case-insensitive (RFC 3986 §3.1, §3.2.2)
-   and safe to uppercase → alphanumeric mode for the scheme+host.
-   Path/query/fragment kept verbatim (may be case-sensitive).
-   ---------------------------------------------------------------- */
-function segmentsForURL(url){
-  var m=url.match(/^(https?:\/\/[^/?#]*)/i);
-  if(!m)return makeSegments(url);
-  var head=m[1].toUpperCase();
-  var tail=url.substring(m[1].length);
+  // Reconstruct path
   var segs=[];
-  if(head.length)segs.push(new QRAlphanumeric(head));
-  if(tail.length)segs=segs.concat(makeSegments(tail));
+  var pos=n;
+  while(pos>0){
+    var j=prevJ[pos], mode=prevMode[pos];
+    var slice=payload.substring(j,pos);
+    if(mode===1)segs.push(new QRNumeric(slice));
+    else if(mode===2)segs.push(new QRAlphanumeric(up.substring(j,pos)));
+    else segs.push(new QR8bitByte(slice));
+    pos=j;
+  }
+  segs.reverse();
   return segs;
 }
 
-/* ─── Segment bit-cost estimator (for UI stats) ──────────────────
-   Returns {bytesBefore, bitsAfter, segments} for a given payload
-   so the UI can show savings vs naive all-byte encoding.
-   ---------------------------------------------------------------- */
+/* Compute exact bit count for a segment list at version class `vc` */
+function segListBits(segs, vc) {
+  var bits=0;
+  for(var i=0;i<segs.length;i++){
+    var s=segs[i];
+    bits+=4+MODE_LEN_BITS[s.mode][vc];
+    if(s.mode===1){var l=s.data.length;bits+=Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);}
+    else if(s.mode===2){var l=s.data.length;bits+=Math.floor(l/2)*11+(l%2===1?6:0);}
+    else bits+=new TextEncoder().encode(s.data).length*8;
+  }
+  return bits;
+}
+
+/* Main entry point: find optimal segmentation across all 3 version classes.
+   Preprocesses URLs: uppercase scheme+host (RFC 3986 §3.1, §3.2.2).
+   Returns the segment list that yields the smallest valid QR version. */
+function optimalSegments(payload, ec) {
+  if(!payload||!payload.length)return[];
+  ec=ec||"M";
+  // URL preprocessing
+  var processed=payload;
+  var um=payload.match(/^(https?:\/\/[^/?#]*)/i);
+  if(um)processed=um[1].toUpperCase()+payload.substring(um[1].length);
+
+  var bestSegs=null, bestVersion=41;
+  for(var vc=0;vc<=2;vc++){
+    var segs=dpSegments(processed,vc);
+    if(!segs.length)continue;
+    var minV=vc===0?1:vc===1?10:27;
+    var maxV=vc===0?9:vc===1?26:40;
+    for(var v=minV;v<=maxV;v++){
+      if(segListBits(segs,vc)+4<=dpMaxDataBits(v,ec)){
+        if(v<bestVersion){bestVersion=v;bestSegs=segs;}
+        break;
+      }
+    }
+  }
+  return bestSegs||dpSegments(processed,2);
+}
+
+/* ─── Segment analyzer (for UI stats panel) ──────────────────────
+   Returns {segs, bytesBefore, bitsAfter, bitsBefore, savingPct}  */
 function analyzeSegments(payload, typeHint){
-  var segs = typeHint==="url" ? segmentsForURL(payload) : makeSegments(payload);
+  var ec = typeHint === "url" ? "M" : "M"; // conservative default
+  var segs = optimalSegments(payload, ec);
   var bytesBefore = new TextEncoder().encode(payload).length;
-  // Rough bit estimate at version 1-9 (most common)
-  var bitsAfter = 0;
-  segs.forEach(function(s){
-    bitsAfter += 4; // mode indicator
-    bitsAfter += s.getLengthInBits(5); // length field (version 5 representative)
-    if(s.mode===1){var l=s.data.length;bitsAfter+=Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);}
-    else if(s.mode===2){var l=s.data.length;bitsAfter+=Math.floor(l/2)*11+(l%2?6:0);}
-    else{bitsAfter+=bytesBefore*8;}
-  });
+  // Use vc=0 as representative (most payloads land in v1–9)
+  var bitsAfter = segListBits(segs, 0);
   var bitsBefore = bytesBefore*8 + 4 + 8; // naive single byte segment
   var savingPct  = bitsBefore>0 ? Math.round((1-bitsAfter/bitsBefore)*100) : 0;
   return {segs, bytesBefore, bitsAfter, bitsBefore, savingPct};
@@ -541,10 +624,10 @@ QRCodeModel.prototype={
   getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++){for(var c=0;c<mc;c++){var smc=0;for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(dr===0&&dc===0)continue;if((r+dr)>=0&&(r+dr)<mc&&(c+dc)>=0&&(c+dc)<mc&&this.isDark(r+dr,c+dc)===this.isDark(r,c))smc++;}if(smc>5)lp+=(smc-5)+3;}}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++){if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;}for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++){if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;}var dk=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(this.isDark(r,c))dk++;var rt=Math.abs(100*dk/mc/mc-50)/5;lp+=rt*10;return lp}
 };
 
-/* v16: makeQR uses optimal segment list instead of single byte-mode object */
+/* v17: makeQR uses DP-optimal segment list */
 function makeQR(payload,ec){
   var qr=new QRCodeModel(-1,ec);
-  var segs=segmentsForURL(payload);
+  var segs=optimalSegments(payload,ec);
   for(var i=0;i<segs.length;i++)qr.dataList.push(segs[i]);
   qr.make();
   var mc=qr.getModuleCount(),version=(mc-17)/4;
@@ -620,8 +703,14 @@ const ALNUM_CHARS="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 const ALNUM_MAP=(function(){var m={};for(var i=0;i<ALNUM_CHARS.length;i++)m[ALNUM_CHARS[i]]=i;return m;})();
 function QRAlphanumeric(d){this.mode=2;this.data=d;}
 QRAlphanumeric.prototype={getLength:function(){return this.data.length},getLengthInBits:function(tn){return tn<10?9:tn<27?11:13},write:function(b){var i=0,s=this.data;while(i+1<s.length){b.put(ALNUM_MAP[s[i]]*45+ALNUM_MAP[s[i+1]],11);i+=2;}if(i<s.length)b.put(ALNUM_MAP[s[i]],6);}};
-function makeSegments(payload){if(!payload||!payload.length)return[];var segs=[],i=0,n=payload.length,up=payload.toUpperCase();while(i<n){var numEnd=i;while(numEnd<n&&payload[numEnd]>='0'&&payload[numEnd]<='9')numEnd++;var alnEnd=i;while(alnEnd<n&&ALNUM_MAP[up[alnEnd]]!==undefined)alnEnd++;if(numEnd-i>=3){segs.push(new QRNumeric(payload.substring(i,numEnd)));i=numEnd;}else if(alnEnd-i>=6){segs.push(new QRAlphanumeric(up.substring(i,alnEnd)));i=alnEnd;}else{var byteEnd=i;while(byteEnd<n){var nr=byteEnd;while(nr<n&&payload[nr]>='0'&&payload[nr]<='9')nr++;if(nr-byteEnd>=3)break;var ar=byteEnd;while(ar<n&&ALNUM_MAP[up[ar]]!==undefined)ar++;if(ar-byteEnd>=6)break;byteEnd++;}if(byteEnd>i)segs.push(new QR8bitByte(payload.substring(i,byteEnd)));i=byteEnd;}}return segs;}
-function segmentsForURL(url){var m=url.match(/^(https?:\\/\\/[^/?#]*)/i);if(!m)return makeSegments(url);var head=m[1].toUpperCase();var tail=url.substring(m[1].length);var segs=[];if(head.length)segs.push(new QRAlphanumeric(head));if(tail.length)segs=segs.concat(makeSegments(tail));return segs;}
+const MODE_LEN_BITS_W={1:[10,12,14],2:[9,11,13],4:[8,16,16]};
+const VERSION_DATA_BYTES_W=[[19,16,13,9],[34,28,22,16],[55,44,34,26],[80,64,48,36],[108,86,62,46],[136,108,76,60],[154,124,88,66],[192,154,110,86],[230,182,132,100],[271,216,154,122],[321,254,180,140],[367,290,206,158],[425,334,244,180],[458,365,261,197],[520,415,295,223],[586,453,325,253],[644,507,367,283],[718,563,397,313],[792,627,445,341],[858,669,485,385],[929,714,512,406],[1003,782,568,442],[1091,860,614,464],[1171,914,664,514],[1273,1000,718,538],[1367,1062,754,596],[1465,1128,808,628],[1528,1193,871,661],[1628,1267,911,701],[1732,1373,985,745],[1840,1455,1033,793],[1952,1541,1115,845],[2068,1631,1171,901],[2188,1725,1231,961],[2303,1812,1286,986],[2431,1914,1354,1054],[2563,1992,1426,1096],[2699,2102,1502,1142],[2809,2216,1582,1222],[2953,2334,1666,1276]];
+const EC_IDX_W={L:0,M:1,Q:2,H:3};
+function dpMaxDataBitsW(tn,ec){return((VERSION_DATA_BYTES_W[tn-1]||[0,0,0,0])[EC_IDX_W[ec]]||0)*8;}
+function dpSegmentsW(payload,vc){if(!payload||!payload.length)return[];var n=payload.length,up=payload.toUpperCase(),INF=1e15,dist=new Float64Array(n+1).fill(INF),prevJ=new Int32Array(n+1).fill(-1),prevMode=new Uint8Array(n+1);dist[0]=0;for(var i=0;i<n;i++){if(dist[i]===INF)continue;var base=dist[i];var numEnd=i;while(numEnd<n&&payload[numEnd]>='0'&&payload[numEnd]<='9')numEnd++;if(numEnd>i){var h1=4+MODE_LEN_BITS_W[1][vc];for(var j=i+1;j<=numEnd;j++){var l=j-i,cost=base+h1+Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=1;}}}var alnEnd=i;while(alnEnd<n&&ALNUM_MAP[up[alnEnd]]!==undefined)alnEnd++;if(alnEnd>i){var h2=4+MODE_LEN_BITS_W[2][vc];for(var j=i+1;j<=alnEnd;j++){var l=j-i,cost=base+h2+Math.floor(l/2)*11+(l%2===1?6:0);if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=2;}}}var h4=4+MODE_LEN_BITS_W[4][vc],byteBits=h4;for(var j=i;j<n;j++){var cp=payload.codePointAt(j);byteBits+=(cp>0x7FF?(cp>0xFFFF?4:3):(cp>0x7F?2:1))*8;var cost=base+byteBits;if(cost<dist[j+1]){dist[j+1]=cost;prevJ[j+1]=i;prevMode[j+1]=4;}if(cp>0xFFFF)j++;}}var segs=[],pos=n;while(pos>0){var j=prevJ[pos],mode=prevMode[pos],slice=payload.substring(j,pos);if(mode===1)segs.push(new QRNumeric(slice));else if(mode===2)segs.push(new QRAlphanumeric(up.substring(j,pos)));else segs.push(new QR8bitByte(slice));pos=j;}segs.reverse();return segs;}
+function segListBitsW(segs,vc){var bits=0;for(var i=0;i<segs.length;i++){var s=segs[i];bits+=4+MODE_LEN_BITS_W[s.mode][vc];if(s.mode===1){var l=s.data.length;bits+=Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);}else if(s.mode===2){var l=s.data.length;bits+=Math.floor(l/2)*11+(l%2===1?6:0);}else bits+=new TextEncoder().encode(s.data).length*8;}return bits;}
+function optimalSegments(payload,ec){if(!payload||!payload.length)return[];ec=ec||"M";var processed=payload,um=payload.match(/^(https?:\\/\\/[^/?#]*)/i);if(um)processed=um[1].toUpperCase()+payload.substring(um[1].length);var bestSegs=null,bestVersion=41;for(var vc=0;vc<=2;vc++){var segs=dpSegmentsW(processed,vc);if(!segs.length)continue;var minV=vc===0?1:vc===1?10:27,maxV=vc===0?9:vc===1?26:40;for(var v=minV;v<=maxV;v++){if(segListBitsW(segs,vc)+4<=dpMaxDataBitsW(v,ec)){if(v<bestVersion){bestVersion=v;bestSegs=segs;}break;}}}return bestSegs||dpSegmentsW(processed,2);}
+function makeQR(payload,ec){var qr=new QRCodeModel(-1,ec);var segs=optimalSegments(payload,ec);for(var i=0;i<segs.length;i++)qr.dataList.push(segs[i]);qr.make();var mc=qr.getModuleCount(),version=(mc-17)/4;var grid=new Uint8Array(mc*mc);for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(qr.isDark(r,c))grid[r*mc+c]=1;return{grid,mc,version};}
 function getBCHDigit(d){var dg=0;while(d!==0){dg++;d>>>=1}return dg}
 function getBCHTypeInfo(d){var v=d<<10;while(getBCHDigit(v)-getBCHDigit(G15)>=0)v^=(G15<<(getBCHDigit(v)-getBCHDigit(G15)));return((d<<10)|v)^G15_MASK}
 function getBCHTypeNumber(d){var v=d<<12;while(getBCHDigit(v)-getBCHDigit(G18)>=0)v^=(G18<<(getBCHDigit(v)-getBCHDigit(G18)));return(d<<12)|v}
@@ -631,7 +720,6 @@ const MASK_PATTERN=[function(r,c){return(r+c)%2===0},function(r,c){return r%2===
 const HEADROOM_TARGET=0.65;
 function QRCodeModel(tn,ec){this.typeNumber=tn;this.errorCorrectionLevel=ec;this.modules=null;this.moduleCount=0;this.dataCache=null;this.dataList=[];}
 QRCodeModel.prototype={addData:function(d){this.dataList.push(new QR8bitByte(d));this.dataCache=null},isDark:function(r,c){if(r<0||this.moduleCount<=r||c<0||this.moduleCount<=c)throw new Error(r+","+c);return this.modules[r][c]},getModuleCount:function(){return this.moduleCount},make:function(){if(this.typeNumber<1){var minTn=1;for(;minTn<40;minTn++){var rsb=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);var buf=new QRBitBuffer();for(var i=0;i<this.dataList.length;i++){var d=this.dataList[i];buf.put(d.mode,4);buf.put(d.getLength(),d.getLengthInBits(minTn));d.write(buf);}var tdc=0;for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;if(buf.getLengthInBits()<=tdc*8)break;}var dataBytes=0;for(var i=0;i<this.dataList.length;i++)dataBytes+=this.dataList[i].getLength();var rsb0=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);var cap0=0;for(var i=0;i<rsb0.length;i++)cap0+=rsb0[i].dataCount;var util0=dataBytes/cap0;if(util0>HEADROOM_TARGET&&minTn<40){var nextTn=minTn+1;var rsb1=QRRSBlock.getRSBlocks(nextTn,this.errorCorrectionLevel);var cap1=0;for(var i=0;i<rsb1.length;i++)cap1+=rsb1[i].dataCount;this.typeNumber=(dataBytes/cap1<=HEADROOM_TARGET)?nextTn:minTn;}else{this.typeNumber=minTn;}}this.makeImpl(false,this.getBestMaskPattern());},makeImpl:function(test,mp){this.moduleCount=this.typeNumber*4+17;this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var c=0;c<this.moduleCount;c++)this.modules[r][c]=null;}this.setupPositionProbePattern(0,0);this.setupPositionProbePattern(this.moduleCount-7,0);this.setupPositionProbePattern(0,this.moduleCount-7);this.setupPositionAdjustPattern();this.setupTimingPattern();this.setupTypeInfo(test,mp);if(this.typeNumber>=7)this.setupTypeNumber(test);if(this.dataCache===null)this.dataCache=createData(this.typeNumber,this.errorCorrectionLevel,this.dataList);this.mapData(this.dataCache,mp)},setupPositionProbePattern:function(r,c){for(var dr=-1;dr<=7;dr++){if(r+dr<=-1||this.moduleCount<=r+dr)continue;for(var dc=-1;dc<=7;dc++){if(c+dc<=-1||this.moduleCount<=c+dc)continue;this.modules[r+dr][c+dc]=(dr>=0&&dr<=6&&(dc===0||dc===6))||(dc>=0&&dc<=6&&(dr===0||dr===6))||(dr>=2&&dr<=4&&dc>=2&&dc<=4);}}},getBestMaskPattern:function(){var mp=0,ml=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lp=this.getLostPoint();if(i===0||ml>lp){ml=lp;mp=i;}}return mp},setupTimingPattern:function(){for(let r=8;r<this.moduleCount-8;r++)if(this.modules[r][6]===null)this.modules[r][6]=(r%2===0);for(let c=8;c<this.moduleCount-8;c++)if(this.modules[6][c]===null)this.modules[6][c]=(c%2===0)},setupPositionAdjustPattern:function(){var p=PATTERN_POSITION_TABLE[this.typeNumber-1];for(var i=0;i<p.length;i++)for(var j=0;j<p.length;j++){var r=p[i],c=p[j];if(this.modules[r][c]!==null)continue;for(var dr=-2;dr<=2;dr++)for(var dc=-2;dc<=2;dc++)this.modules[r+dr][c+dc]=(dr===-2||dr===2||dc===-2||dc===2||(dr===0&&dc===0));}},setupTypeNumber:function(test){var bits=getBCHTypeNumber(this.typeNumber);for(var i=0;i<18;i++){this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=!test&&((bits>>i)&1)===1;}for(var i=0;i<18;i++){this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=!test&&((bits>>i)&1)===1;}},setupTypeInfo:function(test,mp){var _ecN={L:1,M:0,Q:3,H:2};var data=((typeof this.errorCorrectionLevel==='string'?_ecN[this.errorCorrectionLevel]:this.errorCorrectionLevel)<<3)|mp,bits=getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},mapData:function(d,mp){var inc=-1,r=this.moduleCount-1,bI=0,mf=MASK_PATTERN[mp];for(var c=this.moduleCount-1;c>0;c-=2){if(c===6)c--;while(true){for(var dc=0;dc<2;dc++){if(this.modules[r][c-dc]===null){var dk=false;if(bI<d.length*8)dk=((d[Math.floor(bI/8)]>>>(7-bI%8))&1)===1;if(mf(r,c-dc))dk=!dk;this.modules[r][c-dc]=dk;bI++;}}r+=inc;if(r<0||this.moduleCount<=r){r-=inc;inc=-inc;break;}}}},getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++){for(var c=0;c<mc;c++){var smc=0;for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(dr===0&&dc===0)continue;if((r+dr)>=0&&(r+dr)<mc&&(c+dc)>=0&&(c+dc)<mc&&this.isDark(r+dr,c+dc)===this.isDark(r,c))smc++;}if(smc>5)lp+=(smc-5)+3;}}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++){if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;}for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++){if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;}var dk=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(this.isDark(r,c))dk++;var rt=Math.abs(100*dk/mc/mc-50)/5;lp+=rt*10;return lp}};
-function makeQR(payload,ec){var qr=new QRCodeModel(-1,ec);var segs=segmentsForURL(payload);for(var i=0;i<segs.length;i++)qr.dataList.push(segs[i]);qr.make();var mc=qr.getModuleCount(),version=(mc-17)/4;var grid=new Uint8Array(mc*mc);for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(qr.isDark(r,c))grid[r*mc+c]=1;return{grid,mc,version};}
 self.onmessage = function(e) {
   const { id, payload, ec } = e.data;
   try {
@@ -766,7 +854,7 @@ function qrMainThread(payload, ec) {
 }
 
 function checkAlgoParity() {
-  const TEST = "https://qrstudio-parity.test/v16";
+  const TEST = "https://qrstudio-parity.test/v17/order/20250101?ref=HOME";
   try {
     const main = makeQR(TEST, "M");
     qrViaWorker(TEST, "M").then(w => {
@@ -775,13 +863,13 @@ function checkAlgoParity() {
                  main.grid.every((v, i) => v === w.grid[i]);
       if (!ok) {
         console.error(
-          "%c[QR Studio v16] ALGORITHM DRIFT DETECTED",
+          "%c[QR Studio v17] ALGORITHM DRIFT DETECTED",
           "background:#c00;color:#fff;padding:6px 10px;font-size:13px"
         );
       }
     }).catch(() => {});
   } catch(e) {
-    console.warn("[QR Studio v16] Parity check failed:", e.message);
+    console.warn("[QR Studio v17] Parity check failed:", e.message);
   }
 }
 
@@ -832,12 +920,13 @@ async function jsQRDecode(grid, mc) {
   return null;
 }
 
-/* v16: reconstruct what the QR actually stores given the segment optimizer.
-   Alphanumeric segments are uppercased; byte segments are verbatim.
-   This gives us the canonical encoded string to compare against what jsQR reads back. */
+/* v17: reconstruct what the QR actually stores — uses same DP optimizer as makeQR,
+   so alnum segments are uppercased and byte segments are verbatim.
+   This gives the canonical string that jsQR will return when scanning. */
 function canonicalEncoded(payload, type) {
-  const segs = type === "url" ? segmentsForURL(payload) : makeSegments(payload);
-  return segs.map(s => s.mode === 1 || s.mode === 2 ? s.data.toUpperCase() : s.data).join("");
+  var ec = type === "wifi" ? "H" : type === "vcard" ? "H" : "M";
+  var segs = optimalSegments(payload, ec);
+  return segs.map(function(s){ return s.mode===1||s.mode===2 ? s.data.toUpperCase() : s.data; }).join("");
 }
 
 function qrDataMatch(expected, decoded, type) {
@@ -1218,7 +1307,7 @@ function renderShell() {
       h("div", { class: "logo-name" }, "QR", h("span", {}, "_"), "studio")
     ),
     h("div", { class: "hdr-badges" },
-      h("div", { class: "hdr-badge v16" }, "v16"),
+      h("div", { class: "hdr-badge v17" }, "v17"),
       h("div", { class: "hdr-badge" }, "ENCODE"),
       h("div", { class: "offline-badge", id: "offline-badge" }, "✈ offline mode")
     )
