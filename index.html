@@ -94,7 +94,7 @@ input.err{border-color:rgba(255,68,85,.5)!important;box-shadow:0 0 0 3px rgba(25
 }
 .ec-suggest-dismiss:hover{border-color:rgba(255,255,255,.2);color:#e4ebe0}
 
-/* v16: encoding mode chip */
+/* v17: encoding mode chip */
 .mode-chip{
   font-family:'Space Mono',monospace;font-size:9px;
   padding:2px 7px;border-radius:4px;
@@ -216,7 +216,7 @@ header{border-bottom:1px solid var(--bord);padding:0 24px;height:56px;display:fl
   border-radius:10px;padding:14px;display:flex;align-items:center;gap:10px;
   font-family:'Space Mono',monospace;font-size:11px;color:#ff8090;margin-top:8px}
 
-/* v16: encoding breakdown panel */
+/* v17: encoding breakdown panel */
 .enc-breakdown{
   margin-top:10px;
   padding:8px 10px;
@@ -312,12 +312,12 @@ function QR8bitByte(d){this.mode=4;this.data=d;}
 QR8bitByte.prototype={getLength:function(){return new TextEncoder().encode(this.data).length},getLengthInBits:function(tn){return tn<10?8:16},write:function(b){var bytes=new TextEncoder().encode(this.data);for(var i=0;i<bytes.length;i++)b.put(bytes[i],8)}};
 
 /* ═══════════════════════════════════════════════════════════════════
-   v16 — MULTI-SEGMENT ENCODING
+   v17 — DP-OPTIMAL MULTI-SEGMENT ENCODING
    ───────────────────────────────────────────────────────────────────
    QR codes support four encoding modes. v15 and earlier always used
    Byte mode (mode 4) which stores every character as 8 bits.
 
-   v16 adds two cheaper modes and a segment optimizer:
+   v17 uses a Dijkstra-style DP to find globally optimal segmentation:
 
    ┌──────────────┬───────────────────────┬──────────────────────┐
    │ Mode         │ Characters            │ Bits per char        │
@@ -410,7 +410,7 @@ const EC_IDX = {L:0,M:1,Q:2,H:3};
 function dpMaxDataBits(tn,ec){return(VERSION_DATA_BYTES[tn-1]||[0,0,0,0])[EC_IDX[ec]]*8;}
 
 /* Run Dijkstra-style DP on `payload` assuming version class `vc`.
-   Returns optimal segment array (alnum segs are uppercased, same as v16 greedy). */
+   Returns optimal segment array (alnum segs uppercased per QR spec). */
 function dpSegments(payload, vc) {
   if(!payload||!payload.length)return[];
   var n=payload.length, up=payload.toUpperCase();
@@ -516,14 +516,22 @@ function optimalSegments(payload, ec) {
 }
 
 /* ─── Segment analyzer (for UI stats panel) ──────────────────────
-   Returns {segs, bytesBefore, bitsAfter, bitsBefore, savingPct}  */
-function analyzeSegments(payload, typeHint){
-  var ec = typeHint === "url" ? "M" : "M"; // conservative default
+   Returns {segs, bytesBefore, bitsAfter, bitsBefore, savingPct}
+   Uses the correct version class for the EC level being applied.  */
+function analyzeSegments(payload, typeHint, ec){
+  ec = ec || "M";
   var segs = optimalSegments(payload, ec);
   var bytesBefore = new TextEncoder().encode(payload).length;
-  // Use vc=0 as representative (most payloads land in v1–9)
-  var bitsAfter = segListBits(segs, 0);
-  var bitsBefore = bytesBefore*8 + 4 + 8; // naive single byte segment
+  // Derive the actual version class the DP chose, so header widths are correct
+  var vc = 0;
+  for(var v=1;v<=40;v++){
+    if(segListBits(segs, v<=9?0:v<=26?1:2)+4 <= dpMaxDataBits(v,ec)){
+      vc = v<=9?0:v<=26?1:2;
+      break;
+    }
+  }
+  var bitsAfter  = segListBits(segs, vc);
+  var bitsBefore = bytesBefore*8 + 4 + 8; // naive single byte-mode segment
   var savingPct  = bitsBefore>0 ? Math.round((1-bitsAfter/bitsBefore)*100) : 0;
   return {segs, bytesBefore, bitsAfter, bitsBefore, savingPct};
 }
@@ -572,6 +580,7 @@ QRCodeModel.prototype={
   make:function(){
     if(this.typeNumber<1){
       var minTn=1;
+      var minBuf=null; // capture the bit buffer at the minimum fitting version
       for(;minTn<40;minTn++){
         var rsb=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);
         var buf=new QRBitBuffer();
@@ -583,19 +592,26 @@ QRCodeModel.prototype={
         }
         var tdc=0;
         for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;
-        if(buf.getLengthInBits()<=tdc*8)break;
+        if(buf.getLengthInBits()<=tdc*8){minBuf=buf;break;}
       }
-      var dataBytes=0;
-      for(var i=0;i<this.dataList.length;i++)
-        dataBytes+=this.dataList[i].getLength();
+      // Headroom: compare actual encoded bits vs capacity bits (correct for all modes)
       var rsb0=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);
-      var cap0=0;for(var i=0;i<rsb0.length;i++)cap0+=rsb0[i].dataCount;
-      var util0=dataBytes/cap0;
+      var cap0bits=0;for(var i=0;i<rsb0.length;i++)cap0bits+=rsb0[i].dataCount*8;
+      var usedBits=minBuf?minBuf.getLengthInBits():cap0bits;
+      var util0=usedBits/cap0bits;
       if(util0>HEADROOM_TARGET && minTn<40){
         var nextTn=minTn+1;
         var rsb1=QRRSBlock.getRSBlocks(nextTn,this.errorCorrectionLevel);
-        var cap1=0;for(var i=0;i<rsb1.length;i++)cap1+=rsb1[i].dataCount;
-        var util1=dataBytes/cap1;
+        var cap1bits=0;for(var i=0;i<rsb1.length;i++)cap1bits+=rsb1[i].dataCount*8;
+        // Re-encode at nextTn to get correct bit count (header widths may differ)
+        var buf1=new QRBitBuffer();
+        for(var i=0;i<this.dataList.length;i++){
+          var d=this.dataList[i];
+          buf1.put(d.mode,4);
+          buf1.put(d.getLength(),d.getLengthInBits(nextTn));
+          d.write(buf1);
+        }
+        var util1=buf1.getLengthInBits()/cap1bits;
         if(util1<=HEADROOM_TARGET){
           this.typeNumber=nextTn;
         } else {
@@ -719,7 +735,7 @@ function createData(tn,ec,dl){var rsb=QRRSBlock.getRSBlocks(tn,ec),buf=new QRBit
 const MASK_PATTERN=[function(r,c){return(r+c)%2===0},function(r,c){return r%2===0},function(r,c){return c%3===0},function(r,c){return(r+c)%3===0},function(r,c){return(Math.floor(r/2)+Math.floor(c/3))%2===0},function(r,c){return(r*c)%2+(r*c)%3===0},function(r,c){return((r*c)%2+(r*c)%3)%2===0},function(r,c){return((r*c)%3+(r+c)%2)%2===0}];
 const HEADROOM_TARGET=0.65;
 function QRCodeModel(tn,ec){this.typeNumber=tn;this.errorCorrectionLevel=ec;this.modules=null;this.moduleCount=0;this.dataCache=null;this.dataList=[];}
-QRCodeModel.prototype={addData:function(d){this.dataList.push(new QR8bitByte(d));this.dataCache=null},isDark:function(r,c){if(r<0||this.moduleCount<=r||c<0||this.moduleCount<=c)throw new Error(r+","+c);return this.modules[r][c]},getModuleCount:function(){return this.moduleCount},make:function(){if(this.typeNumber<1){var minTn=1;for(;minTn<40;minTn++){var rsb=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);var buf=new QRBitBuffer();for(var i=0;i<this.dataList.length;i++){var d=this.dataList[i];buf.put(d.mode,4);buf.put(d.getLength(),d.getLengthInBits(minTn));d.write(buf);}var tdc=0;for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;if(buf.getLengthInBits()<=tdc*8)break;}var dataBytes=0;for(var i=0;i<this.dataList.length;i++)dataBytes+=this.dataList[i].getLength();var rsb0=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);var cap0=0;for(var i=0;i<rsb0.length;i++)cap0+=rsb0[i].dataCount;var util0=dataBytes/cap0;if(util0>HEADROOM_TARGET&&minTn<40){var nextTn=minTn+1;var rsb1=QRRSBlock.getRSBlocks(nextTn,this.errorCorrectionLevel);var cap1=0;for(var i=0;i<rsb1.length;i++)cap1+=rsb1[i].dataCount;this.typeNumber=(dataBytes/cap1<=HEADROOM_TARGET)?nextTn:minTn;}else{this.typeNumber=minTn;}}this.makeImpl(false,this.getBestMaskPattern());},makeImpl:function(test,mp){this.moduleCount=this.typeNumber*4+17;this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var c=0;c<this.moduleCount;c++)this.modules[r][c]=null;}this.setupPositionProbePattern(0,0);this.setupPositionProbePattern(this.moduleCount-7,0);this.setupPositionProbePattern(0,this.moduleCount-7);this.setupPositionAdjustPattern();this.setupTimingPattern();this.setupTypeInfo(test,mp);if(this.typeNumber>=7)this.setupTypeNumber(test);if(this.dataCache===null)this.dataCache=createData(this.typeNumber,this.errorCorrectionLevel,this.dataList);this.mapData(this.dataCache,mp)},setupPositionProbePattern:function(r,c){for(var dr=-1;dr<=7;dr++){if(r+dr<=-1||this.moduleCount<=r+dr)continue;for(var dc=-1;dc<=7;dc++){if(c+dc<=-1||this.moduleCount<=c+dc)continue;this.modules[r+dr][c+dc]=(dr>=0&&dr<=6&&(dc===0||dc===6))||(dc>=0&&dc<=6&&(dr===0||dr===6))||(dr>=2&&dr<=4&&dc>=2&&dc<=4);}}},getBestMaskPattern:function(){var mp=0,ml=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lp=this.getLostPoint();if(i===0||ml>lp){ml=lp;mp=i;}}return mp},setupTimingPattern:function(){for(let r=8;r<this.moduleCount-8;r++)if(this.modules[r][6]===null)this.modules[r][6]=(r%2===0);for(let c=8;c<this.moduleCount-8;c++)if(this.modules[6][c]===null)this.modules[6][c]=(c%2===0)},setupPositionAdjustPattern:function(){var p=PATTERN_POSITION_TABLE[this.typeNumber-1];for(var i=0;i<p.length;i++)for(var j=0;j<p.length;j++){var r=p[i],c=p[j];if(this.modules[r][c]!==null)continue;for(var dr=-2;dr<=2;dr++)for(var dc=-2;dc<=2;dc++)this.modules[r+dr][c+dc]=(dr===-2||dr===2||dc===-2||dc===2||(dr===0&&dc===0));}},setupTypeNumber:function(test){var bits=getBCHTypeNumber(this.typeNumber);for(var i=0;i<18;i++){this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=!test&&((bits>>i)&1)===1;}for(var i=0;i<18;i++){this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=!test&&((bits>>i)&1)===1;}},setupTypeInfo:function(test,mp){var _ecN={L:1,M:0,Q:3,H:2};var data=((typeof this.errorCorrectionLevel==='string'?_ecN[this.errorCorrectionLevel]:this.errorCorrectionLevel)<<3)|mp,bits=getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},mapData:function(d,mp){var inc=-1,r=this.moduleCount-1,bI=0,mf=MASK_PATTERN[mp];for(var c=this.moduleCount-1;c>0;c-=2){if(c===6)c--;while(true){for(var dc=0;dc<2;dc++){if(this.modules[r][c-dc]===null){var dk=false;if(bI<d.length*8)dk=((d[Math.floor(bI/8)]>>>(7-bI%8))&1)===1;if(mf(r,c-dc))dk=!dk;this.modules[r][c-dc]=dk;bI++;}}r+=inc;if(r<0||this.moduleCount<=r){r-=inc;inc=-inc;break;}}}},getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++){for(var c=0;c<mc;c++){var smc=0;for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(dr===0&&dc===0)continue;if((r+dr)>=0&&(r+dr)<mc&&(c+dc)>=0&&(c+dc)<mc&&this.isDark(r+dr,c+dc)===this.isDark(r,c))smc++;}if(smc>5)lp+=(smc-5)+3;}}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++){if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;}for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++){if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;}var dk=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(this.isDark(r,c))dk++;var rt=Math.abs(100*dk/mc/mc-50)/5;lp+=rt*10;return lp}};
+QRCodeModel.prototype={addData:function(d){this.dataList.push(new QR8bitByte(d));this.dataCache=null},isDark:function(r,c){if(r<0||this.moduleCount<=r||c<0||this.moduleCount<=c)throw new Error(r+","+c);return this.modules[r][c]},getModuleCount:function(){return this.moduleCount},make:function(){if(this.typeNumber<1){var minTn=1,minBuf=null;for(;minTn<40;minTn++){var rsb=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);var buf=new QRBitBuffer();for(var i=0;i<this.dataList.length;i++){var d=this.dataList[i];buf.put(d.mode,4);buf.put(d.getLength(),d.getLengthInBits(minTn));d.write(buf);}var tdc=0;for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;if(buf.getLengthInBits()<=tdc*8){minBuf=buf;break;}}var rsb0=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);var cap0bits=0;for(var i=0;i<rsb0.length;i++)cap0bits+=rsb0[i].dataCount*8;var usedBits=minBuf?minBuf.getLengthInBits():cap0bits;var util0=usedBits/cap0bits;if(util0>HEADROOM_TARGET&&minTn<40){var nextTn=minTn+1;var rsb1=QRRSBlock.getRSBlocks(nextTn,this.errorCorrectionLevel);var cap1bits=0;for(var i=0;i<rsb1.length;i++)cap1bits+=rsb1[i].dataCount*8;var buf1=new QRBitBuffer();for(var i=0;i<this.dataList.length;i++){var d=this.dataList[i];buf1.put(d.mode,4);buf1.put(d.getLength(),d.getLengthInBits(nextTn));d.write(buf1);}this.typeNumber=(buf1.getLengthInBits()/cap1bits<=HEADROOM_TARGET)?nextTn:minTn;}else{this.typeNumber=minTn;}}this.makeImpl(false,this.getBestMaskPattern());},makeImpl:function(test,mp){this.moduleCount=this.typeNumber*4+17;this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var c=0;c<this.moduleCount;c++)this.modules[r][c]=null;}this.setupPositionProbePattern(0,0);this.setupPositionProbePattern(this.moduleCount-7,0);this.setupPositionProbePattern(0,this.moduleCount-7);this.setupPositionAdjustPattern();this.setupTimingPattern();this.setupTypeInfo(test,mp);if(this.typeNumber>=7)this.setupTypeNumber(test);if(this.dataCache===null)this.dataCache=createData(this.typeNumber,this.errorCorrectionLevel,this.dataList);this.mapData(this.dataCache,mp)},setupPositionProbePattern:function(r,c){for(var dr=-1;dr<=7;dr++){if(r+dr<=-1||this.moduleCount<=r+dr)continue;for(var dc=-1;dc<=7;dc++){if(c+dc<=-1||this.moduleCount<=c+dc)continue;this.modules[r+dr][c+dc]=(dr>=0&&dr<=6&&(dc===0||dc===6))||(dc>=0&&dc<=6&&(dr===0||dr===6))||(dr>=2&&dr<=4&&dc>=2&&dc<=4);}}},getBestMaskPattern:function(){var mp=0,ml=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lp=this.getLostPoint();if(i===0||ml>lp){ml=lp;mp=i;}}return mp},setupTimingPattern:function(){for(let r=8;r<this.moduleCount-8;r++)if(this.modules[r][6]===null)this.modules[r][6]=(r%2===0);for(let c=8;c<this.moduleCount-8;c++)if(this.modules[6][c]===null)this.modules[6][c]=(c%2===0)},setupPositionAdjustPattern:function(){var p=PATTERN_POSITION_TABLE[this.typeNumber-1];for(var i=0;i<p.length;i++)for(var j=0;j<p.length;j++){var r=p[i],c=p[j];if(this.modules[r][c]!==null)continue;for(var dr=-2;dr<=2;dr++)for(var dc=-2;dc<=2;dc++)this.modules[r+dr][c+dc]=(dr===-2||dr===2||dc===-2||dc===2||(dr===0&&dc===0));}},setupTypeNumber:function(test){var bits=getBCHTypeNumber(this.typeNumber);for(var i=0;i<18;i++){this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=!test&&((bits>>i)&1)===1;}for(var i=0;i<18;i++){this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=!test&&((bits>>i)&1)===1;}},setupTypeInfo:function(test,mp){var _ecN={L:1,M:0,Q:3,H:2};var data=((typeof this.errorCorrectionLevel==='string'?_ecN[this.errorCorrectionLevel]:this.errorCorrectionLevel)<<3)|mp,bits=getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<6)this.modules[i][8]=mod;else if(i<8)this.modules[i+1][8]=mod;else this.modules[this.moduleCount-15+i][8]=mod;}for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)===1);if(i<8)this.modules[8][this.moduleCount-i-1]=mod;else if(i<9)this.modules[8][15-i-1+1]=mod;else this.modules[8][15-i-1]=mod;}this.modules[this.moduleCount-8][8]=!test;},mapData:function(d,mp){var inc=-1,r=this.moduleCount-1,bI=0,mf=MASK_PATTERN[mp];for(var c=this.moduleCount-1;c>0;c-=2){if(c===6)c--;while(true){for(var dc=0;dc<2;dc++){if(this.modules[r][c-dc]===null){var dk=false;if(bI<d.length*8)dk=((d[Math.floor(bI/8)]>>>(7-bI%8))&1)===1;if(mf(r,c-dc))dk=!dk;this.modules[r][c-dc]=dk;bI++;}}r+=inc;if(r<0||this.moduleCount<=r){r-=inc;inc=-inc;break;}}}},getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++){for(var c=0;c<mc;c++){var smc=0;for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(dr===0&&dc===0)continue;if((r+dr)>=0&&(r+dr)<mc&&(c+dc)>=0&&(c+dc)<mc&&this.isDark(r+dr,c+dc)===this.isDark(r,c))smc++;}if(smc>5)lp+=(smc-5)+3;}}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++){if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;}for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++){if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;}var dk=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(this.isDark(r,c))dk++;var rt=Math.abs(100*dk/mc/mc-50)/5;lp+=rt*10;return lp}};
 self.onmessage = function(e) {
   const { id, payload, ec } = e.data;
   try {
@@ -854,19 +870,31 @@ function qrMainThread(payload, ec) {
 }
 
 function checkAlgoParity() {
-  const TEST = "https://qrstudio-parity.test/v17/order/20250101?ref=HOME";
+  // Test suite covering distinct code paths: URL+numeric (mixed vc), pure numeric,
+  // byte-only lowercase, high-EC vCard, and emoji (multi-byte UTF-8 / surrogate pairs).
+  const CASES = [
+    ["https://qrstudio-parity.test/v17/order/20250101?ref=HOME", "M"],
+    ["01234567890123456789",                                       "M"],  // pure numeric
+    ["hello world — byte only lowercase",                          "L"],  // byte mode, no alnum
+    ["BEGIN:VCARD\nFN:Test User\nTEL:+15550001234\nEND:VCARD",    "H"],  // multi-seg, H EC
+    ["https://example.com/emoji/\uD83D\uDE00\uD83C\uDF89",        "M"],  // surrogate pairs
+  ];
   try {
-    const main = makeQR(TEST, "M");
-    qrViaWorker(TEST, "M").then(w => {
-      const ok = w.ok &&
-                 main.grid.length === w.grid.length &&
-                 main.grid.every((v, i) => v === w.grid[i]);
-      if (!ok) {
-        console.error(
-          "%c[QR Studio v17] ALGORITHM DRIFT DETECTED",
-          "background:#c00;color:#fff;padding:6px 10px;font-size:13px"
-        );
-      }
+    let drift = false;
+    const checks = CASES.map(([payload, ec]) => {
+      const main = makeQR(payload, ec);
+      return qrViaWorker(payload, ec).then(w => {
+        const ok = w.ok &&
+                   main.grid.length === w.grid.length &&
+                   main.grid.every((v, i) => v === w.grid[i]);
+        if (!ok) { drift = true; console.error("[QR Studio v17] Drift on:", JSON.stringify(payload.substring(0,40))); }
+      });
+    });
+    Promise.all(checks).then(() => {
+      if (drift) console.error(
+        "%c[QR Studio v17] ALGORITHM DRIFT DETECTED — worker and main thread disagree",
+        "background:#c00;color:#fff;padding:6px 10px;font-size:13px"
+      );
     }).catch(() => {});
   } catch(e) {
     console.warn("[QR Studio v17] Parity check failed:", e.message);
@@ -920,21 +948,20 @@ async function jsQRDecode(grid, mc) {
   return null;
 }
 
-/* v17: reconstruct what the QR actually stores — uses same DP optimizer as makeQR,
-   so alnum segments are uppercased and byte segments are verbatim.
-   This gives the canonical string that jsQR will return when scanning. */
-function canonicalEncoded(payload, type) {
-  var ec = type === "wifi" ? "H" : type === "vcard" ? "H" : "M";
-  var segs = optimalSegments(payload, ec);
+/* v17: reconstruct what the QR actually stores — uses same DP optimizer as makeQR.
+   Must receive the actual ecLevel used for generation so version-class selection
+   matches exactly (EC affects capacity, which affects which version class is used). */
+function canonicalEncoded(payload, ec) {
+  var segs = optimalSegments(payload, ec||"M");
   return segs.map(function(s){ return s.mode===1||s.mode===2 ? s.data.toUpperCase() : s.data; }).join("");
 }
 
-function qrDataMatch(expected, decoded, type) {
+function qrDataMatch(expected, decoded, type, ec) {
   if (decoded === expected) return true;
-  // v16: compare against the canonical encoded form (what was actually stored in the QR)
-  // Alphanumeric segments get uppercased during encoding, so jsQR returns them uppercase.
+  // Compare against canonical encoded form (alnum segments uppercased by QR spec).
+  // Pass actual EC level so optimalSegments uses correct version class.
   try {
-    const canonical = canonicalEncoded(expected, type);
+    const canonical = canonicalEncoded(expected, ec||"M");
     if (decoded === canonical) return true;
   } catch {}
   if (VERIFY_NORMALIZE_TYPES.has(type)) {
@@ -944,13 +971,13 @@ function qrDataMatch(expected, decoded, type) {
   return false;
 }
 
-async function runVerify(payload, grid, mc, type, myToken) {
+async function runVerify(payload, grid, mc, type, ec, myToken) {
   if (VERIFY_SKIP_TYPES.has(type)) { update({ verifyState: "off" }); return; }
   update({ verifyState: "checking" });
   try {
     const decoded = await jsQRDecode(grid, mc);
     if (myToken !== _verifyToken) return;
-    const matched = decoded ? qrDataMatch(payload, decoded, type) : false;
+    const matched = decoded ? qrDataMatch(payload, decoded, type, ec) : false;
     update({ verifyState: matched ? "pass" : "fail" });
   } catch {
     if (myToken === _verifyToken) update({ verifyState: "off" });
@@ -977,7 +1004,7 @@ const S = {
   staleFields:  false,
   ecSuggest:    null,
   ecDismissed:  false,
-  encAnalysis:  null,  // v16: {segs, savingPct, ...}
+  encAnalysis:  null,  // v17: {segs, savingPct, ...}
 };
 
 function update(patch) {
@@ -1056,7 +1083,7 @@ function getFirstError(errs) { return Object.values(errs)[0] ?? null; }
 
 function vcEsc(v)  { return (v||"").slice(0,MAX_FIELD).replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
 function vcTel(v)  { return (v||"").replace(/[^\d+\-().\s]/g,"").trim().slice(0,30); }
-function wfEsc(v)  { return (v||"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
+function wfEsc(v)  { return (v||"").replace(/\\/g,"\\\\").replace(/"/g,"\\\"").replace(/:/g,"\\:").replace(/;/g,"\\;").replace(/,/g,"\\,"); }
 
 function buildData(type, f) {
   switch(type) {
@@ -1167,7 +1194,7 @@ const QRC = (() => {
       update({ genState: "ready", qrVersion: version, genError: null });
 
       const verifyToken = ++_verifyToken;
-      runVerify(opts.payload, grid, mc, opts.type, verifyToken);
+      runVerify(opts.payload, grid, mc, opts.type, opts.ecLevel, verifyToken);
 
     } catch(e) {
       if (myToken !== _genToken) return;
@@ -1288,8 +1315,8 @@ function triggerQR() {
   if (suggestChanged) S.ecDismissed = false;
   S.ecSuggest = suggest;
 
-  // v16: compute encoding analysis for stats panel
-  S.encAnalysis = analyzeSegments(raw, S.qrType);
+  // v17: compute encoding analysis for stats panel
+  S.encAnalysis = analyzeSegments(raw, S.qrType, S.ecLevel);
 
   QRC.generate({ payload: raw, ecLevel: S.ecLevel, hasMargin: S.hasMargin, type: S.qrType });
 }
@@ -1600,7 +1627,7 @@ function renderForm(type, fields, fieldErrs) {
 
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 14 — RENDER PREVIEW
-   v16 additions:
+   v17 additions:
    - Encoding breakdown panel (segment chips + saving %)
    - Mode chip in stats row
 ═══════════════════════════════════════════════════════════════════ */
@@ -1687,7 +1714,7 @@ function renderPreview() {
     statsWrap.appendChild(chip("", sv(S.ecLevel), " EC"));
     statsWrap.appendChild(chip(S.workerFailed ? "dim" : "", sv(S.workerFailed ? "·" : "⚡"), " " + (S.workerFailed ? "main" : "worker")));
 
-    // v16: show encoding mode chip
+    // v17: show encoding mode chip
     if (S.encAnalysis) {
       const { segs, savingPct } = S.encAnalysis;
       const modes = [...new Set(segs.map(s => s.mode))].sort();
@@ -1699,14 +1726,14 @@ function renderPreview() {
       modeChip.appendChild(document.createTextNode("mode "));
       modeChip.appendChild(modeSpan);
       if (savingPct > 0) {
-        modeChip.title = `v16 multi-segment encoding saves ~${savingPct}% vs all-byte`;
+        modeChip.title = `v17 DP-optimal encoding saves ~${savingPct}% vs all-byte`;
       }
       statsWrap.appendChild(modeChip);
     }
 
     pc.appendChild(statsWrap);
 
-    // v16: encoding breakdown panel
+    // v17: encoding breakdown panel
     if (S.encAnalysis && S.encAnalysis.segs.length > 1) {
       const { segs, savingPct } = S.encAnalysis;
       const breakdown = h("div", { class: "enc-breakdown show" });
@@ -1774,7 +1801,7 @@ setTimeout(() => ensureJsQR().catch(() => {}), 1500);
 const _bootPayload = buildData(S.qrType, S.fields);
 if (_bootPayload.trim()) {
   S.ecSuggest  = getECSuggestion(S.qrType, S.fields, S.ecLevel);
-  S.encAnalysis = analyzeSegments(_bootPayload, S.qrType);
+  S.encAnalysis = analyzeSegments(_bootPayload, S.qrType, S.ecLevel);
   QRC.generate({ payload: _bootPayload, ecLevel: S.ecLevel, hasMargin: S.hasMargin, type: S.qrType });
 }
 
