@@ -765,12 +765,7 @@ const MAX_URL   = 2048;
 const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
 
-const QR_CAP = {
-  L:[17,32,53,78,106,134,154,192,230,271,321,367,425,458,520,586,644,718,792,858,929,1003,1091,1171,1273,1367,1465,1528,1628,1732,1840,1952,2068,2188,2303,2431,2563,2699,2809,2953],
-  M:[14,26,42,62,84,106,122,152,180,213,251,287,331,362,412,450,504,560,624,666,711,779,857,911,997,1059,1125,1190,1264,1370,1452,1538,1628,1722,1809,1911,1989,2099,2213,2331],
-  Q:[11,20,32,46,60,74,86,108,130,151,177,203,241,258,292,322,364,394,442,482,509,565,611,661,715,751,805,868,908,982,1030,1112,1168,1228,1283,1351,1423,1499,1579,1663],
-  H:[7,14,24,34,44,58,64,84,98,119,137,155,177,194,220,250,280,310,338,382,403,439,461,511,535,593,625,658,698,742,790,842,898,958,983,1051,1093,1139,1219,1273]
-};
+
 
 const VALID_FIELD_KEYS = new Set(["url","text","email","subject","body","phone","message","ssid","password","security","firstName","lastName","org","website","address"]);
 const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT };
@@ -781,33 +776,63 @@ const VERIFY_NORMALIZE_TYPES = new Set(["email","sms","phone","vcard"]);
 const VERIFY_MOD_SIZES = [16, 32, 64];
 
 /* ═══════════════════════════════════════════════════════════════════
-   EC SUGGESTION ENGINE (unchanged from v15)
+   EC SUGGESTION ENGINE — v17 revision
+   Uses actual encoded version (via optimalSegments) rather than raw
+   byte thresholds, so suggestions are calibrated to DP encoding.
+   Core logic: only suggest a higher EC level when it doesn't increase
+   the QR version (i.e. it's genuinely free), or suggest M when the
+   current EC is forcing a meaningfully larger version.
 ═══════════════════════════════════════════════════════════════════ */
 const EC_RANK = { L: 0, M: 1, Q: 2, H: 3 };
 const EC_RECOVERY = { L: "7%", M: "15%", Q: "25%", H: "30%" };
 
+/* Returns the minimum QR version needed to encode payload at ec.
+   Uses optimalSegments so the result is consistent with makeQR. */
+function minVersionFor(payload, ec) {
+  if (!payload || !payload.length) return 1;
+  const segs = optimalSegments(payload, ec);
+  if (!segs.length) return 1;
+  // Try each version in order; use the version-class-correct header widths.
+  for (var v = 1; v <= 40; v++) {
+    var vc = v <= 9 ? 0 : v <= 26 ? 1 : 2;
+    if (segListBits(segs, vc) + 4 <= dpMaxDataBits(v, ec)) return v;
+  }
+  return 40;
+}
+
 function getECSuggestion(type, fields, currentEC) {
   const raw = buildData(type, fields);
   if (!raw || !raw.trim()) return null;
-  const byteLen = new TextEncoder().encode(raw).length;
 
   let suggested = null;
   let reason    = null;
 
+  // Physical-print types always warrant H regardless of size.
   if (type === "wifi" || type === "vcard") {
     suggested = "H";
     reason = type === "wifi"
       ? "WiFi QR codes are often printed on labels, router cards, or stickers — physical media that gets scratched and worn. H-level recovers up to 30% damage."
       : "vCards get printed on business cards and physical handouts. H-level ensures the code stays scannable even after wear and handling.";
-  } else if (byteLen <= 50) {
-    suggested = "H";
-    reason = `Your data is only ${byteLen} bytes — so choosing H (30% damage recovery) adds almost no visual complexity to the QR code. Maximum robustness for free.`;
-  } else if (byteLen <= 150) {
-    suggested = "Q";
-    reason = `At ${byteLen} bytes, Q-level (25% recovery) gives strong error correction without making the QR code significantly denser or harder to scan.`;
-  } else if (byteLen > 500 && (currentEC === "H" || currentEC === "Q")) {
-    suggested = "M";
-    reason = `With ${byteLen} bytes of data, H or Q-level forces a high-version QR code with very dense modules — which can be harder to scan at small sizes. M-level (15% recovery) keeps the code cleaner.`;
+  } else {
+    // Compute the version this payload actually needs at each relevant EC level.
+    const vCurrent = minVersionFor(raw, currentEC);
+    const vH = minVersionFor(raw, "H");
+    const vQ = minVersionFor(raw, "Q");
+    const vM = minVersionFor(raw, "M");
+
+    if (EC_RANK[currentEC] < EC_RANK["H"] && vH === vCurrent) {
+      // H is free — same version, 30% damage recovery costs nothing.
+      suggested = "H";
+      reason = `Switching to H-level error correction won't change your QR size (still v${vCurrent}) — you get 30% damage recovery for free.`;
+    } else if (EC_RANK[currentEC] < EC_RANK["Q"] && vQ === vCurrent) {
+      // Q is free — same version, 25% damage recovery costs nothing.
+      suggested = "Q";
+      reason = `Q-level error correction fits the same v${vCurrent} QR — you get 25% damage recovery with no increase in code complexity.`;
+    } else if (EC_RANK[currentEC] > EC_RANK["M"] && vCurrent > vM + 2) {
+      // Current EC is forcing 3+ extra versions vs M — meaningful density penalty.
+      suggested = "M";
+      reason = `${currentEC}-level error correction is pushing your QR to v${vCurrent}. Dropping to M keeps it at v${vM} — significantly fewer, larger modules that scan more reliably at small sizes.`;
+    }
   }
 
   if (!suggested) return null;
@@ -1686,8 +1711,13 @@ function renderPreview() {
   if (S.genState === "ready") {
     const rawData = buildData(S.qrType, S.fields);
     const byteLen = new TextEncoder().encode(rawData).length;
-    const maxCap  = QR_CAP[S.ecLevel]?.[S.qrVersion - 1] || 0;
-    const pct     = maxCap ? Math.round(byteLen / maxCap * 100) : 0;
+
+    // Cap and headroom: use actual encoded bits vs capacity bits so the display
+    // is consistent with make() and correct for alnum/numeric segments.
+    // Fall back to byte estimate if encAnalysis isn't ready yet.
+    const capBits  = dpMaxDataBits(S.qrVersion, S.ecLevel) || 1;
+    const usedBits = S.encAnalysis ? S.encAnalysis.bitsAfter : byteLen * 8;
+    const pct      = Math.min(100, Math.round(usedBits / capBits * 100));
     const headroomPct = 100 - pct;
 
     const statsWrap = h("div", { class: "qr-stats" });
@@ -1699,15 +1729,17 @@ function renderPreview() {
     const sv = val => { const s = document.createElement("span"); s.className = "sv"; s.textContent = String(val); return s; };
 
     statsWrap.appendChild(chip(S.qrVersion > 25 ? "bad" : S.qrVersion > 15 ? "warn" : "", "v", sv(S.qrVersion)));
-    statsWrap.appendChild(chip(pct > 90 ? "bad" : pct > 70 ? "warn" : "", "cap ", sv(pct + "%")));
+    const capChip = chip(pct > 90 ? "bad" : pct > 70 ? "warn" : "", "cap ", sv(pct + "%"));
+    capChip.title = `${usedBits} encoded bits of ${capBits} available at v${S.qrVersion}/${S.ecLevel}`;
+    statsWrap.appendChild(capChip);
 
     const headroomClass = headroomPct >= 35 ? "headroom-ok" : headroomPct >= 15 ? "headroom-warn" : "headroom-bad";
     const headroomChip = chip(headroomClass, "headroom ", sv(headroomPct + "%"));
     headroomChip.title = headroomPct >= 35
-      ? "Good headroom — RS error correction has plenty of room to protect data"
+      ? "Good headroom — encoded data uses well under capacity; error correction has room to work"
       : headroomPct >= 15
       ? "Moderate headroom — consider a higher EC level for physical printing"
-      : "Low headroom — QR is near capacity; damage may not be recoverable";
+      : "Low headroom — QR is near encoded capacity; damage may not be recoverable";
     statsWrap.appendChild(headroomChip);
 
     statsWrap.appendChild(chip("", "bytes ", sv(byteLen)));
