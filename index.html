@@ -94,7 +94,6 @@ input.err{border-color:rgba(255,68,85,.5)!important;box-shadow:0 0 0 3px rgba(25
 }
 .ec-suggest-dismiss:hover{border-color:rgba(255,255,255,.2);color:#e4ebe0}
 
-/* v17: encoding mode chip */
 .mode-chip{
   font-family:'Space Mono',monospace;font-size:9px;
   padding:2px 7px;border-radius:4px;
@@ -216,7 +215,6 @@ header{border-bottom:1px solid var(--bord);padding:0 24px;height:56px;display:fl
   border-radius:10px;padding:14px;display:flex;align-items:center;gap:10px;
   font-family:'Space Mono',monospace;font-size:11px;color:#ff8090;margin-top:8px}
 
-/* v17: encoding breakdown panel */
 .enc-breakdown{
   margin-top:10px;
   padding:8px 10px;
@@ -307,45 +305,9 @@ QRRSBlock.getRSBlocks=function(tn,ec){var t=RS_BLOCK_TABLE[(tn-1)*4+{L:0,M:1,Q:2
 function QRBitBuffer(){this.buffer=[];this.length=0}
 QRBitBuffer.prototype={get:function(i){return((this.buffer[Math.floor(i/8)]>>>(7-i%8))&1)===1},put:function(n,l){for(var i=0;i<l;i++)this.putBit(((n>>>(l-i-1))&1)===1)},getLengthInBits:function(){return this.length},putBit:function(b){var bI=Math.floor(this.length/8);if(this.buffer.length<=bI)this.buffer.push(0);if(b)this.buffer[bI]|=(0x80>>>(this.length%8));this.length++}};
 
-/* ── Byte mode (mode 4) — unchanged ── */
 function QR8bitByte(d){this.mode=4;this.data=d;}
 QR8bitByte.prototype={getLength:function(){return new TextEncoder().encode(this.data).length},getLengthInBits:function(tn){return tn<10?8:16},write:function(b){var bytes=new TextEncoder().encode(this.data);for(var i=0;i<bytes.length;i++)b.put(bytes[i],8)}};
 
-/* ═══════════════════════════════════════════════════════════════════
-   v17 — DP-OPTIMAL MULTI-SEGMENT ENCODING
-   ───────────────────────────────────────────────────────────────────
-   QR codes support four encoding modes. v15 and earlier always used
-   Byte mode (mode 4) which stores every character as 8 bits.
-
-   v17 uses a Dijkstra-style DP to find globally optimal segmentation:
-
-   ┌──────────────┬───────────────────────┬──────────────────────┐
-   │ Mode         │ Characters            │ Bits per char        │
-   ├──────────────┼───────────────────────┼──────────────────────┤
-   │ Numeric  (1) │ 0–9                   │ 3.33 (10 bits/3)     │
-   │ Alnum    (2) │ 0–9 A–Z $%*+-./:space │ 5.5  (11 bits/2)     │
-   │ Byte     (4) │ any UTF-8             │ 8                    │
-   └──────────────┴───────────────────────┴──────────────────────┘
-
-   The optimizer scans the payload left-to-right and greedily selects
-   the cheapest mode for each run. Minimum run thresholds (3 for
-   numeric, 6 for alphanumeric) prevent emitting a segment whose
-   4-bit mode header + length field costs more than the saving.
-
-   A URL-aware builder also uppercases the scheme + authority
-   (case-insensitive per RFC 3986) to maximise alphanumeric runs.
-
-   Typical savings vs v15 all-byte encoding:
-     Short URL     https://example.com/shop        -28%
-     Long URL      https://shop.example.com/...    -22%
-     Phone tel     tel:+15550001234                -40%
-     WiFi SSID     WIFI:T:WPA;S:HomeNet;P:...      -30%
-     Pure digits   01234567890123                  -58%
-═══════════════════════════════════════════════════════════════════ */
-
-/* ─── Numeric mode (mode 1) ──────────────────────────────────────
-   Groups of 3 digits → 10 bits; 2 → 7 bits; 1 → 4 bits.
-   ---------------------------------------------------------------- */
 function QRNumeric(d){this.mode=1;this.data=d;}
 QRNumeric.prototype={
   getLength:function(){return this.data.length},
@@ -358,9 +320,6 @@ QRNumeric.prototype={
   }
 };
 
-/* ─── Alphanumeric mode (mode 2) ─────────────────────────────────
-   Pairs → 11 bits; singles → 6 bits.
-   ---------------------------------------------------------------- */
 const ALNUM_CHARS="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 const ALNUM_MAP=(function(){var m={};for(var i=0;i<ALNUM_CHARS.length;i++)m[ALNUM_CHARS[i]]=i;return m;})();
 function QRAlphanumeric(d){this.mode=2;this.data=d;}
@@ -374,26 +333,12 @@ QRAlphanumeric.prototype={
   }
 };
 
-/* ─── Segment optimizer ──────────────────────────────────────────
-   Greedy left-to-right: at each position try cheapest mode first.
-   Minimum run thresholds prevent segment-header cost blowup.
-   ---------------------------------------------------------------- */
-/* ═══════════════════════════════════════════════════════════════════
-   v17 — OPTIMAL DP SEGMENTER
-   Shortest-path dynamic programming over all N+1 character boundary
-   nodes, with exact bit-cost edge weights per version class.
-   Always ≥ as good as greedy, often 1–2 versions smaller.
-   ═══════════════════════════════════════════════════════════════════ */
-
-/* Bit widths of the character-count field per mode per version class
-   (class 0 = v1–9, class 1 = v10–26, class 2 = v27–40)            */
 const MODE_LEN_BITS = {
-  1: [10, 12, 14],   // numeric
-  2: [9,  11, 13],   // alphanumeric
-  4: [8,  16, 16],   // byte
+  1: [10, 12, 14],
+  2: [9,  11, 13],
+  4: [8,  16, 16],
 };
 
-/* Data bytes available per version (index 0 = v1) for each EC level */
 const VERSION_DATA_BYTES = [
   [19,16,13,9],[34,28,22,16],[55,44,34,26],[80,64,48,36],[108,86,62,46],
   [136,108,76,60],[154,124,88,66],[192,154,110,86],[230,182,132,100],[271,216,154,122],
@@ -409,8 +354,6 @@ const EC_IDX = {L:0,M:1,Q:2,H:3};
 
 function dpMaxDataBits(tn,ec){return(VERSION_DATA_BYTES[tn-1]||[0,0,0,0])[EC_IDX[ec]]*8;}
 
-/* Run Dijkstra-style DP on `payload` assuming version class `vc`.
-   Returns optimal segment array (alnum segs uppercased per QR spec). */
 function dpSegments(payload, vc) {
   if(!payload||!payload.length)return[];
   var n=payload.length, up=payload.toUpperCase();
@@ -424,7 +367,6 @@ function dpSegments(payload, vc) {
     if(dist[i]===INF)continue;
     var base=dist[i];
 
-    // ── Numeric edges ──
     var numEnd=i;
     while(numEnd<n&&payload[numEnd]>='0'&&payload[numEnd]<='9')numEnd++;
     if(numEnd>i){
@@ -436,19 +378,23 @@ function dpSegments(payload, vc) {
       }
     }
 
-    // ── Alphanumeric edges ──
+    // ALNUM edges: only extend while every character in the run is already
+    // uppercase (or a non-alpha alnum char like digit/symbol). Alphanumeric
+    // mode forces uppercase in the QR bitstream, so allowing lowercase here
+    // would silently corrupt case-sensitive URLs (e.g. /showSignUp → /SHOWSIGNUP).
     var alnEnd=i;
     while(alnEnd<n&&ALNUM_MAP[up[alnEnd]]!==undefined)alnEnd++;
     if(alnEnd>i){
       var h2=4+MODE_LEN_BITS[2][vc];
       for(var j=i+1;j<=alnEnd;j++){
+        var ch=payload[j-1];
+        if(ch!==ch.toUpperCase())break; // lowercase char — stop extending alnum run
         var l=j-i;
         var cost=base+h2+Math.floor(l/2)*11+(l%2===1?6:0);
         if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=2;}
       }
     }
 
-    // ── Byte edges ──
     var h4=4+MODE_LEN_BITS[4][vc];
     var byteBits=h4;
     for(var j=i;j<n;j++){
@@ -460,14 +406,15 @@ function dpSegments(payload, vc) {
     }
   }
 
-  // Reconstruct path
+  // Reconstruct — alnum segs are guaranteed all-uppercase by the edge guard above,
+  // so we use the original slice (not up.substring) to be explicit and safe.
   var segs=[];
   var pos=n;
   while(pos>0){
     var j=prevJ[pos], mode=prevMode[pos];
     var slice=payload.substring(j,pos);
     if(mode===1)segs.push(new QRNumeric(slice));
-    else if(mode===2)segs.push(new QRAlphanumeric(up.substring(j,pos)));
+    else if(mode===2)segs.push(new QRAlphanumeric(slice));
     else segs.push(new QR8bitByte(slice));
     pos=j;
   }
@@ -475,7 +422,6 @@ function dpSegments(payload, vc) {
   return segs;
 }
 
-/* Compute exact bit count for a segment list at version class `vc` */
 function segListBits(segs, vc) {
   var bits=0;
   for(var i=0;i<segs.length;i++){
@@ -488,16 +434,34 @@ function segListBits(segs, vc) {
   return bits;
 }
 
-/* Main entry point: find optimal segmentation across all 3 version classes.
-   Preprocesses URLs: uppercase scheme+host (RFC 3986 §3.1, §3.2.2).
-   Returns the segment list that yields the smallest valid QR version. */
+/* ═══════════════════════════════════════════════════════════════════
+   FIX: URL preprocessing — only uppercase scheme+host when the
+   path/query/fragment contains NO lowercase letters.
+   Mixed-case paths like /showSignUp/... must stay in byte mode
+   to preserve case-sensitivity. Uppercasing them corrupts the URL.
+═══════════════════════════════════════════════════════════════════ */
+function preprocessPayload(payload) {
+  if (!payload) return payload;
+  var um = payload.match(/^(https?:\/\/[^/?#]*)(.*)/i);
+  if (!um) return payload;
+  var schemeHost = um[1];   // e.g. https://m.signupgenius.com
+  var rest       = um[2];   // e.g. #!/showSignUp/10C0E4DAAA829A6F8C34-...
+  // Only apply uppercasing optimization when the rest of the URL
+  // has NO lowercase letters (i.e., uppercasing won't change it).
+  if (rest === rest.toUpperCase()) {
+    return schemeHost.toUpperCase() + rest;
+  }
+  // Mixed-case path/query/fragment — return unchanged so byte mode
+  // preserves the exact characters the server needs to see.
+  return payload;
+}
+
 function optimalSegments(payload, ec) {
   if(!payload||!payload.length)return[];
   ec=ec||"M";
-  // URL preprocessing
-  var processed=payload;
-  var um=payload.match(/^(https?:\/\/[^/?#]*)/i);
-  if(um)processed=um[1].toUpperCase()+payload.substring(um[1].length);
+
+  // Safe URL preprocessing (case-preserving for mixed-case paths)
+  var processed = preprocessPayload(payload);
 
   var bestSegs=null, bestVersion=41;
   for(var vc=0;vc<=2;vc++){
@@ -515,14 +479,10 @@ function optimalSegments(payload, ec) {
   return bestSegs||dpSegments(processed,2);
 }
 
-/* ─── Segment analyzer (for UI stats panel) ──────────────────────
-   Returns {segs, bytesBefore, bitsAfter, bitsBefore, savingPct}
-   Uses the correct version class for the EC level being applied.  */
 function analyzeSegments(payload, typeHint, ec){
   ec = ec || "M";
   var segs = optimalSegments(payload, ec);
   var bytesBefore = new TextEncoder().encode(payload).length;
-  // Derive the actual version class the DP chose, so header widths are correct
   var vc = 0;
   for(var v=1;v<=40;v++){
     if(segListBits(segs, v<=9?0:v<=26?1:2)+4 <= dpMaxDataBits(v,ec)){
@@ -531,7 +491,7 @@ function analyzeSegments(payload, typeHint, ec){
     }
   }
   var bitsAfter  = segListBits(segs, vc);
-  var bitsBefore = bytesBefore*8 + 4 + 8; // naive single byte-mode segment
+  var bitsBefore = bytesBefore*8 + 4 + 8;
   var savingPct  = bitsBefore>0 ? Math.round((1-bitsAfter/bitsBefore)*100) : 0;
   return {segs, bytesBefore, bitsAfter, bitsBefore, savingPct};
 }
@@ -580,7 +540,7 @@ QRCodeModel.prototype={
   make:function(){
     if(this.typeNumber<1){
       var minTn=1;
-      var minBuf=null; // capture the bit buffer at the minimum fitting version
+      var minBuf=null;
       for(;minTn<40;minTn++){
         var rsb=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);
         var buf=new QRBitBuffer();
@@ -594,7 +554,6 @@ QRCodeModel.prototype={
         for(var i=0;i<rsb.length;i++)tdc+=rsb[i].dataCount;
         if(buf.getLengthInBits()<=tdc*8){minBuf=buf;break;}
       }
-      // Headroom: compare actual encoded bits vs capacity bits (correct for all modes)
       var rsb0=QRRSBlock.getRSBlocks(minTn,this.errorCorrectionLevel);
       var cap0bits=0;for(var i=0;i<rsb0.length;i++)cap0bits+=rsb0[i].dataCount*8;
       var usedBits=minBuf?minBuf.getLengthInBits():cap0bits;
@@ -603,7 +562,6 @@ QRCodeModel.prototype={
         var nextTn=minTn+1;
         var rsb1=QRRSBlock.getRSBlocks(nextTn,this.errorCorrectionLevel);
         var cap1bits=0;for(var i=0;i<rsb1.length;i++)cap1bits+=rsb1[i].dataCount*8;
-        // Re-encode at nextTn to get correct bit count (header widths may differ)
         var buf1=new QRBitBuffer();
         for(var i=0;i<this.dataList.length;i++){
           var d=this.dataList[i];
@@ -640,7 +598,6 @@ QRCodeModel.prototype={
   getLostPoint:function(){var mc=this.moduleCount,lp=0;for(var r=0;r<mc;r++){for(var c=0;c<mc;c++){var smc=0;for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(dr===0&&dc===0)continue;if((r+dr)>=0&&(r+dr)<mc&&(c+dc)>=0&&(c+dc)<mc&&this.isDark(r+dr,c+dc)===this.isDark(r,c))smc++;}if(smc>5)lp+=(smc-5)+3;}}for(var r=0;r<mc-1;r++)for(var c=0;c<mc-1;c++){var cnt=0;if(this.isDark(r,c))cnt++;if(this.isDark(r+1,c))cnt++;if(this.isDark(r,c+1))cnt++;if(this.isDark(r+1,c+1))cnt++;if(cnt===0||cnt===4)lp+=3;}for(var r=0;r<mc;r++)for(var c=0;c<mc-6;c++){if(this.isDark(r,c)&&!this.isDark(r,c+1)&&this.isDark(r,c+2)&&this.isDark(r,c+3)&&this.isDark(r,c+4)&&!this.isDark(r,c+5)&&this.isDark(r,c+6))lp+=40;}for(var c=0;c<mc;c++)for(var r=0;r<mc-6;r++){if(this.isDark(r,c)&&!this.isDark(r+1,c)&&this.isDark(r+2,c)&&this.isDark(r+3,c)&&this.isDark(r+4,c)&&!this.isDark(r+5,c)&&this.isDark(r+6,c))lp+=40;}var dk=0;for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(this.isDark(r,c))dk++;var rt=Math.abs(100*dk/mc/mc-50)/5;lp+=rt*10;return lp}
 };
 
-/* v17: makeQR uses DP-optimal segment list */
 function makeQR(payload,ec){
   var qr=new QRCodeModel(-1,ec);
   var segs=optimalSegments(payload,ec);
@@ -652,7 +609,9 @@ function makeQR(payload,ec){
   return{grid,mc,version};
 }
 
-/* Worker blob — mirrors main-thread algorithm exactly */
+/* ═══════════════════════════════════════════════════════════════════
+   WORKER BLOB — includes same preprocessPayload fix
+═══════════════════════════════════════════════════════════════════ */
 const QR_ALGO_SRC = `
 "use strict";
 const RS_BLOCK_TABLE = [
@@ -723,9 +682,10 @@ const MODE_LEN_BITS_W={1:[10,12,14],2:[9,11,13],4:[8,16,16]};
 const VERSION_DATA_BYTES_W=[[19,16,13,9],[34,28,22,16],[55,44,34,26],[80,64,48,36],[108,86,62,46],[136,108,76,60],[154,124,88,66],[192,154,110,86],[230,182,132,100],[271,216,154,122],[321,254,180,140],[367,290,206,158],[425,334,244,180],[458,365,261,197],[520,415,295,223],[586,453,325,253],[644,507,367,283],[718,563,397,313],[792,627,445,341],[858,669,485,385],[929,714,512,406],[1003,782,568,442],[1091,860,614,464],[1171,914,664,514],[1273,1000,718,538],[1367,1062,754,596],[1465,1128,808,628],[1528,1193,871,661],[1628,1267,911,701],[1732,1373,985,745],[1840,1455,1033,793],[1952,1541,1115,845],[2068,1631,1171,901],[2188,1725,1231,961],[2303,1812,1286,986],[2431,1914,1354,1054],[2563,1992,1426,1096],[2699,2102,1502,1142],[2809,2216,1582,1222],[2953,2334,1666,1276]];
 const EC_IDX_W={L:0,M:1,Q:2,H:3};
 function dpMaxDataBitsW(tn,ec){return((VERSION_DATA_BYTES_W[tn-1]||[0,0,0,0])[EC_IDX_W[ec]]||0)*8;}
-function dpSegmentsW(payload,vc){if(!payload||!payload.length)return[];var n=payload.length,up=payload.toUpperCase(),INF=1e15,dist=new Float64Array(n+1).fill(INF),prevJ=new Int32Array(n+1).fill(-1),prevMode=new Uint8Array(n+1);dist[0]=0;for(var i=0;i<n;i++){if(dist[i]===INF)continue;var base=dist[i];var numEnd=i;while(numEnd<n&&payload[numEnd]>='0'&&payload[numEnd]<='9')numEnd++;if(numEnd>i){var h1=4+MODE_LEN_BITS_W[1][vc];for(var j=i+1;j<=numEnd;j++){var l=j-i,cost=base+h1+Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=1;}}}var alnEnd=i;while(alnEnd<n&&ALNUM_MAP[up[alnEnd]]!==undefined)alnEnd++;if(alnEnd>i){var h2=4+MODE_LEN_BITS_W[2][vc];for(var j=i+1;j<=alnEnd;j++){var l=j-i,cost=base+h2+Math.floor(l/2)*11+(l%2===1?6:0);if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=2;}}}var h4=4+MODE_LEN_BITS_W[4][vc],byteBits=h4;for(var j=i;j<n;j++){var cp=payload.codePointAt(j);byteBits+=(cp>0x7FF?(cp>0xFFFF?4:3):(cp>0x7F?2:1))*8;var cost=base+byteBits;if(cost<dist[j+1]){dist[j+1]=cost;prevJ[j+1]=i;prevMode[j+1]=4;}if(cp>0xFFFF)j++;}}var segs=[],pos=n;while(pos>0){var j=prevJ[pos],mode=prevMode[pos],slice=payload.substring(j,pos);if(mode===1)segs.push(new QRNumeric(slice));else if(mode===2)segs.push(new QRAlphanumeric(up.substring(j,pos)));else segs.push(new QR8bitByte(slice));pos=j;}segs.reverse();return segs;}
+function preprocessPayloadW(payload){if(!payload)return payload;var um=payload.match(/^(https?:\\/\\/[^/?#]*)(.*)/i);if(!um)return payload;var schemeHost=um[1],rest=um[2];if(rest===rest.toUpperCase()){return schemeHost.toUpperCase()+rest;}return payload;}
+function dpSegmentsW(payload,vc){if(!payload||!payload.length)return[];var n=payload.length,up=payload.toUpperCase(),INF=1e15,dist=new Float64Array(n+1).fill(INF),prevJ=new Int32Array(n+1).fill(-1),prevMode=new Uint8Array(n+1);dist[0]=0;for(var i=0;i<n;i++){if(dist[i]===INF)continue;var base=dist[i];var numEnd=i;while(numEnd<n&&payload[numEnd]>='0'&&payload[numEnd]<='9')numEnd++;if(numEnd>i){var h1=4+MODE_LEN_BITS_W[1][vc];for(var j=i+1;j<=numEnd;j++){var l=j-i,cost=base+h1+Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=1;}}}var alnEnd=i;while(alnEnd<n&&ALNUM_MAP[up[alnEnd]]!==undefined)alnEnd++;if(alnEnd>i){var h2=4+MODE_LEN_BITS_W[2][vc];for(var j=i+1;j<=alnEnd;j++){var ch=payload[j-1];if(ch!==ch.toUpperCase())break;var l=j-i,cost=base+h2+Math.floor(l/2)*11+(l%2===1?6:0);if(cost<dist[j]){dist[j]=cost;prevJ[j]=i;prevMode[j]=2;}}}var h4=4+MODE_LEN_BITS_W[4][vc],byteBits=h4;for(var j=i;j<n;j++){var cp=payload.codePointAt(j);byteBits+=(cp>0x7FF?(cp>0xFFFF?4:3):(cp>0x7F?2:1))*8;var cost=base+byteBits;if(cost<dist[j+1]){dist[j+1]=cost;prevJ[j+1]=i;prevMode[j+1]=4;}if(cp>0xFFFF)j++;}}var segs=[],pos=n;while(pos>0){var j=prevJ[pos],mode=prevMode[pos],slice=payload.substring(j,pos);if(mode===1)segs.push(new QRNumeric(slice));else if(mode===2)segs.push(new QRAlphanumeric(slice));else segs.push(new QR8bitByte(slice));pos=j;}segs.reverse();return segs;}
 function segListBitsW(segs,vc){var bits=0;for(var i=0;i<segs.length;i++){var s=segs[i];bits+=4+MODE_LEN_BITS_W[s.mode][vc];if(s.mode===1){var l=s.data.length;bits+=Math.floor(l/3)*10+(l%3===2?7:l%3===1?4:0);}else if(s.mode===2){var l=s.data.length;bits+=Math.floor(l/2)*11+(l%2===1?6:0);}else bits+=new TextEncoder().encode(s.data).length*8;}return bits;}
-function optimalSegments(payload,ec){if(!payload||!payload.length)return[];ec=ec||"M";var processed=payload,um=payload.match(/^(https?:\\/\\/[^/?#]*)/i);if(um)processed=um[1].toUpperCase()+payload.substring(um[1].length);var bestSegs=null,bestVersion=41;for(var vc=0;vc<=2;vc++){var segs=dpSegmentsW(processed,vc);if(!segs.length)continue;var minV=vc===0?1:vc===1?10:27,maxV=vc===0?9:vc===1?26:40;for(var v=minV;v<=maxV;v++){if(segListBitsW(segs,vc)+4<=dpMaxDataBitsW(v,ec)){if(v<bestVersion){bestVersion=v;bestSegs=segs;}break;}}}return bestSegs||dpSegmentsW(processed,2);}
+function optimalSegments(payload,ec){if(!payload||!payload.length)return[];ec=ec||"M";var processed=preprocessPayloadW(payload);var bestSegs=null,bestVersion=41;for(var vc=0;vc<=2;vc++){var segs=dpSegmentsW(processed,vc);if(!segs.length)continue;var minV=vc===0?1:vc===1?10:27,maxV=vc===0?9:vc===1?26:40;for(var v=minV;v<=maxV;v++){if(segListBitsW(segs,vc)+4<=dpMaxDataBitsW(v,ec)){if(v<bestVersion){bestVersion=v;bestSegs=segs;}break;}}}return bestSegs||dpSegmentsW(processed,2);}
 function makeQR(payload,ec){var qr=new QRCodeModel(-1,ec);var segs=optimalSegments(payload,ec);for(var i=0;i<segs.length;i++)qr.dataList.push(segs[i]);qr.make();var mc=qr.getModuleCount(),version=(mc-17)/4;var grid=new Uint8Array(mc*mc);for(var r=0;r<mc;r++)for(var c=0;c<mc;c++)if(qr.isDark(r,c))grid[r*mc+c]=1;return{grid,mc,version};}
 function getBCHDigit(d){var dg=0;while(d!==0){dg++;d>>>=1}return dg}
 function getBCHTypeInfo(d){var v=d<<10;while(getBCHDigit(v)-getBCHDigit(G15)>=0)v^=(G15<<(getBCHDigit(v)-getBCHDigit(G15)));return((d<<10)|v)^G15_MASK}
@@ -765,8 +725,6 @@ const MAX_URL   = 2048;
 const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
 
-
-
 const VALID_FIELD_KEYS = new Set(["url","text","email","subject","body","phone","message","ssid","password","security","firstName","lastName","org","website","address"]);
 const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT };
 const FIELD_DEFAULT_MAX = MAX_FIELD;
@@ -776,23 +734,15 @@ const VERIFY_NORMALIZE_TYPES = new Set(["email","sms","phone","vcard"]);
 const VERIFY_MOD_SIZES = [16, 32, 64];
 
 /* ═══════════════════════════════════════════════════════════════════
-   EC SUGGESTION ENGINE — v17 revision
-   Uses actual encoded version (via optimalSegments) rather than raw
-   byte thresholds, so suggestions are calibrated to DP encoding.
-   Core logic: only suggest a higher EC level when it doesn't increase
-   the QR version (i.e. it's genuinely free), or suggest M when the
-   current EC is forcing a meaningfully larger version.
+   EC SUGGESTION ENGINE
 ═══════════════════════════════════════════════════════════════════ */
 const EC_RANK = { L: 0, M: 1, Q: 2, H: 3 };
 const EC_RECOVERY = { L: "7%", M: "15%", Q: "25%", H: "30%" };
 
-/* Returns the minimum QR version needed to encode payload at ec.
-   Uses optimalSegments so the result is consistent with makeQR. */
 function minVersionFor(payload, ec) {
   if (!payload || !payload.length) return 1;
   const segs = optimalSegments(payload, ec);
   if (!segs.length) return 1;
-  // Try each version in order; use the version-class-correct header widths.
   for (var v = 1; v <= 40; v++) {
     var vc = v <= 9 ? 0 : v <= 26 ? 1 : 2;
     if (segListBits(segs, vc) + 4 <= dpMaxDataBits(v, ec)) return v;
@@ -807,29 +757,24 @@ function getECSuggestion(type, fields, currentEC) {
   let suggested = null;
   let reason    = null;
 
-  // Physical-print types always warrant H regardless of size.
   if (type === "wifi" || type === "vcard") {
     suggested = "H";
     reason = type === "wifi"
       ? "WiFi QR codes are often printed on labels, router cards, or stickers — physical media that gets scratched and worn. H-level recovers up to 30% damage."
       : "vCards get printed on business cards and physical handouts. H-level ensures the code stays scannable even after wear and handling.";
   } else {
-    // Compute the version this payload actually needs at each relevant EC level.
     const vCurrent = minVersionFor(raw, currentEC);
     const vH = minVersionFor(raw, "H");
     const vQ = minVersionFor(raw, "Q");
     const vM = minVersionFor(raw, "M");
 
     if (EC_RANK[currentEC] < EC_RANK["H"] && vH === vCurrent) {
-      // H is free — same version, 30% damage recovery costs nothing.
       suggested = "H";
       reason = `Switching to H-level error correction won't change your QR size (still v${vCurrent}) — you get 30% damage recovery for free.`;
     } else if (EC_RANK[currentEC] < EC_RANK["Q"] && vQ === vCurrent) {
-      // Q is free — same version, 25% damage recovery costs nothing.
       suggested = "Q";
       reason = `Q-level error correction fits the same v${vCurrent} QR — you get 25% damage recovery with no increase in code complexity.`;
     } else if (EC_RANK[currentEC] > EC_RANK["M"] && vCurrent > vM + 2) {
-      // Current EC is forcing 3+ extra versions vs M — meaningful density penalty.
       suggested = "M";
       reason = `${currentEC}-level error correction is pushing your QR to v${vCurrent}. Dropping to M keeps it at v${vM} — significantly fewer, larger modules that scan more reliably at small sizes.`;
     }
@@ -895,14 +840,14 @@ function qrMainThread(payload, ec) {
 }
 
 function checkAlgoParity() {
-  // Test suite covering distinct code paths: URL+numeric (mixed vc), pure numeric,
-  // byte-only lowercase, high-EC vCard, and emoji (multi-byte UTF-8 / surrogate pairs).
   const CASES = [
     ["https://qrstudio-parity.test/v17/order/20250101?ref=HOME", "M"],
-    ["01234567890123456789",                                       "M"],  // pure numeric
-    ["hello world — byte only lowercase",                          "L"],  // byte mode, no alnum
-    ["BEGIN:VCARD\nFN:Test User\nTEL:+15550001234\nEND:VCARD",    "H"],  // multi-seg, H EC
-    ["https://example.com/emoji/\uD83D\uDE00\uD83C\uDF89",        "M"],  // surrogate pairs
+    ["01234567890123456789",                                       "M"],
+    ["hello world — byte only lowercase",                          "L"],
+    ["BEGIN:VCARD\nFN:Test User\nTEL:+15550001234\nEND:VCARD",    "H"],
+    ["https://example.com/emoji/\uD83D\uDE00\uD83C\uDF89",        "M"],
+    // Key regression test: mixed-case path must survive round-trip unchanged
+    ["https://m.signupgenius.com/#!/showSignUp/10C0E4DAAA829A6F8C34-56289969-atlanta", "M"],
   ];
   try {
     let drift = false;
@@ -912,7 +857,7 @@ function checkAlgoParity() {
         const ok = w.ok &&
                    main.grid.length === w.grid.length &&
                    main.grid.every((v, i) => v === w.grid[i]);
-        if (!ok) { drift = true; console.error("[QR Studio v17] Drift on:", JSON.stringify(payload.substring(0,40))); }
+        if (!ok) { drift = true; console.error("[QR Studio v17] Drift on:", JSON.stringify(payload.substring(0,60))); }
       });
     });
     Promise.all(checks).then(() => {
@@ -973,9 +918,6 @@ async function jsQRDecode(grid, mc) {
   return null;
 }
 
-/* v17: reconstruct what the QR actually stores — uses same DP optimizer as makeQR.
-   Must receive the actual ecLevel used for generation so version-class selection
-   matches exactly (EC affects capacity, which affects which version class is used). */
 function canonicalEncoded(payload, ec) {
   var segs = optimalSegments(payload, ec||"M");
   return segs.map(function(s){ return s.mode===1||s.mode===2 ? s.data.toUpperCase() : s.data; }).join("");
@@ -983,8 +925,6 @@ function canonicalEncoded(payload, ec) {
 
 function qrDataMatch(expected, decoded, type, ec) {
   if (decoded === expected) return true;
-  // Compare against canonical encoded form (alnum segments uppercased by QR spec).
-  // Pass actual EC level so optimalSegments uses correct version class.
   try {
     const canonical = canonicalEncoded(expected, ec||"M");
     if (decoded === canonical) return true;
@@ -1029,7 +969,7 @@ const S = {
   staleFields:  false,
   ecSuggest:    null,
   ecDismissed:  false,
-  encAnalysis:  null,  // v17: {segs, savingPct, ...}
+  encAnalysis:  null,
 };
 
 function update(patch) {
@@ -1333,14 +1273,12 @@ function triggerQR() {
   const raw = buildData(S.qrType, S.fields);
   if (!raw.trim()) { QRC.clear(); return; }
 
-  // Compute EC suggestion and reset dismissed state when content changes
   const suggest = getECSuggestion(S.qrType, S.fields, S.ecLevel);
   const prevSuggest = S.ecSuggest;
   const suggestChanged = JSON.stringify(suggest) !== JSON.stringify(prevSuggest);
   if (suggestChanged) S.ecDismissed = false;
   S.ecSuggest = suggest;
 
-  // v17: compute encoding analysis for stats panel
   S.encAnalysis = analyzeSegments(raw, S.qrType, S.ecLevel);
 
   QRC.generate({ payload: raw, ecLevel: S.ecLevel, hasMargin: S.hasMargin, type: S.qrType });
@@ -1652,9 +1590,6 @@ function renderForm(type, fields, fieldErrs) {
 
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 14 — RENDER PREVIEW
-   v17 additions:
-   - Encoding breakdown panel (segment chips + saving %)
-   - Mode chip in stats row
 ═══════════════════════════════════════════════════════════════════ */
 function renderPreview() {
   const pc = document.getElementById("preview-content");
@@ -1670,7 +1605,6 @@ function renderPreview() {
   const stw = document.getElementById("stale-warn");
   if (stw) stw.classList.toggle("show", S.staleFields);
 
-  // EC suggestion panel
   const suggestEl = document.getElementById("ec-suggest");
   if (suggestEl) {
     const shouldShow = S.ecSuggest && !S.ecDismissed;
@@ -1712,9 +1646,6 @@ function renderPreview() {
     const rawData = buildData(S.qrType, S.fields);
     const byteLen = new TextEncoder().encode(rawData).length;
 
-    // Cap and headroom: use actual encoded bits vs capacity bits so the display
-    // is consistent with make() and correct for alnum/numeric segments.
-    // Fall back to byte estimate if encAnalysis isn't ready yet.
     const capBits  = dpMaxDataBits(S.qrVersion, S.ecLevel) || 1;
     const usedBits = S.encAnalysis ? S.encAnalysis.bitsAfter : byteLen * 8;
     const pct      = Math.min(100, Math.round(usedBits / capBits * 100));
@@ -1746,7 +1677,6 @@ function renderPreview() {
     statsWrap.appendChild(chip("", sv(S.ecLevel), " EC"));
     statsWrap.appendChild(chip(S.workerFailed ? "dim" : "", sv(S.workerFailed ? "·" : "⚡"), " " + (S.workerFailed ? "main" : "worker")));
 
-    // v17: show encoding mode chip
     if (S.encAnalysis) {
       const { segs, savingPct } = S.encAnalysis;
       const modes = [...new Set(segs.map(s => s.mode))].sort();
@@ -1765,7 +1695,6 @@ function renderPreview() {
 
     pc.appendChild(statsWrap);
 
-    // v17: encoding breakdown panel
     if (S.encAnalysis && S.encAnalysis.segs.length > 1) {
       const { segs, savingPct } = S.encAnalysis;
       const breakdown = h("div", { class: "enc-breakdown show" });
