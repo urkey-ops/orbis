@@ -196,11 +196,15 @@ header{border-bottom:1px solid var(--bord);padding:0 24px;height:56px;display:fl
 .stat-chip.bad .sv{color:var(--danger)}
 .stat-chip.dim{opacity:.4}
 
-.dl-row{margin-top:14px}
+.dl-row{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .btn-main{width:100%;padding:11px;border-radius:9px;background:var(--a);color:#090b08;
   font-weight:700;font-size:13px;letter-spacing:.02em}
 .btn-main:hover{filter:brightness(1.08)}
-.cp-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.btn-main-svg{width:100%;padding:11px;border-radius:9px;
+  background:transparent;border:1px solid rgba(184,244,0,.35);color:var(--a);
+  font-weight:700;font-size:13px;letter-spacing:.02em;font-family:inherit}
+.btn-main-svg:hover{background:var(--a10);border-color:var(--a)}
+.cp-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
 .btn-g{padding:9px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--bord2);
   color:var(--mut);font-size:12px;font-family:'Space Mono',monospace}
 .btn-g:hover{border-color:rgba(184,244,0,.2);color:#e4ebe0}
@@ -964,12 +968,16 @@ const S = {
   workerFailed: false,
   verifyState:  "off",
   imgCopied:    false,
+  svgCopied:    false,
   dataCopied:   false,
   storageError: false,
   staleFields:  false,
   ecSuggest:    null,
   ecDismissed:  false,
   encAnalysis:  null,
+  // last generated grid/mc — needed for SVG builder
+  _lastGrid:    null,
+  _lastMc:      0,
 };
 
 function update(patch) {
@@ -1098,6 +1106,36 @@ function drawGrid(grid, mc, canvasSize, hasMargin) {
   return canvas;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   SVG BUILDER — pure JS, no dependency, infinitely scalable output.
+   Uses a single <path> element with M/h/v commands to draw all dark
+   modules in one stroke — far smaller than one <rect> per module and
+   renders identically in every SVG-capable tool (Figma, Illustrator,
+   browsers, laser cutters, print shops).
+═══════════════════════════════════════════════════════════════════ */
+function buildSVG(grid, mc, hasMargin, fgColor, bgColor) {
+  fgColor = fgColor || "#000000";
+  bgColor = bgColor || "#ffffff";
+  const qz   = hasMargin ? 4 : 0;
+  const size  = mc + qz * 2;          // total modules including quiet zone
+  // Build one path: for each dark module emit M x y h 1 v 1 h-1 Z
+  // Modules are 1×1 in SVG user units; viewBox handles scaling.
+  let d = "";
+  for (let r = 0; r < mc; r++) {
+    for (let c = 0; c < mc; c++) {
+      if (grid[r * mc + c]) {
+        const x = c + qz, y = r + qz;
+        d += `M${x} ${y}h1v1h-1z`;
+      }
+    }
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">
+  <rect width="${size}" height="${size}" fill="${bgColor}"/>
+  <path fill="${fgColor}" d="${d}"/>
+</svg>`;
+}
+
 function friendlyQRError(msg) {
   if (!msg) return "QR generation failed";
   if (/code length overflow/i.test(msg)) return "Data too long — try EC level L or M";
@@ -1156,7 +1194,8 @@ const QRC = (() => {
       el.appendChild(canvas);
       if (version === prevVersion && prevVersion !== 1) canvas.style.animation = "none";
 
-      update({ genState: "ready", qrVersion: version, genError: null });
+      update({ genState: "ready", qrVersion: version, genError: null,
+               _lastGrid: grid, _lastMc: mc });
 
       const verifyToken = ++_verifyToken;
       runVerify(opts.payload, grid, mc, opts.type, opts.ecLevel, verifyToken);
@@ -1178,7 +1217,7 @@ const QRC = (() => {
     const big  = document.createElement("div"); big.className  = "big"; big.textContent = "▣";
     const txt  = document.createElement("div"); txt.className  = "txt"; txt.textContent = "Enter data to generate";
     hint.appendChild(big); hint.appendChild(txt); el.appendChild(hint);
-    update({ genState: "idle", verifyState: "off", qrVersion: 1, genError: null, encAnalysis: null });
+    update({ genState: "idle", verifyState: "off", qrVersion: 1, genError: null, encAnalysis: null, _lastGrid: null, _lastMc: 0 });
   }
 
   function download() {
@@ -1208,7 +1247,28 @@ const QRC = (() => {
     } catch { toast("Clipboard write failed", "er"); }
   }
 
-  return { generate, clear, download, copyImage, copyData, setMountClass };
+  function downloadSVG() {
+    if (!S._lastGrid || !S._lastMc) { toast("Generate a QR first", "wn"); return; }
+    const svg  = buildSVG(S._lastGrid, S._lastMc, S.hasMargin);
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "qrcode.svg"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("SVG downloaded — infinite resolution", "ok");
+  }
+
+  async function copySVG() {
+    if (!S._lastGrid || !S._lastMc) { toast("Generate a QR first", "wn"); return; }
+    const svg = buildSVG(S._lastGrid, S._lastMc, S.hasMargin);
+    try {
+      await navigator.clipboard.writeText(svg);
+      update({ svgCopied: true }); setTimeout(() => update({ svgCopied: false }), 2000);
+      toast("SVG copied — paste into Figma, Illustrator, or any editor", "ok");
+    } catch { toast("Clipboard write failed", "er"); }
+  }
+
+  return { generate, clear, download, downloadSVG, copySVG, copyImage, copyData, setMountClass };
 })();
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1722,16 +1782,24 @@ function renderPreview() {
     }
 
     pc.appendChild(h("div", { class: "dl-row" },
-      h("button", { class: "btn-main", onClick: () => QRC.download() }, "⬇ Download PNG")
+      h("button", { class: "btn-main", onClick: () => QRC.download() }, "⬇ PNG"),
+      h("button", { class: "btn-main-svg", onClick: () => QRC.downloadSVG() }, "⬇ SVG")
     ));
     pc.appendChild(h("div", { class: "cp-row" },
       h("button", {
         class: "btn-g" + (S.imgCopied ? " done" : ""),
-        onClick: () => QRC.copyImage()
-      }, S.imgCopied ? "✓ Copied!" : "⎘ Copy Image"),
+        onClick: () => QRC.copyImage(),
+        title: "Copy PNG image to clipboard"
+      }, S.imgCopied ? "✓ Copied!" : "⎘ Copy PNG"),
+      h("button", {
+        class: "btn-g" + (S.svgCopied ? " done" : ""),
+        onClick: () => QRC.copySVG(),
+        title: "Copy SVG markup — paste into Figma, Illustrator, VS Code…"
+      }, S.svgCopied ? "✓ Copied!" : "⎘ Copy SVG"),
       h("button", {
         class: "btn-g" + (S.dataCopied ? " done" : ""),
-        onClick: () => QRC.copyData(buildData(S.qrType, S.fields))
+        onClick: () => QRC.copyData(buildData(S.qrType, S.fields)),
+        title: "Copy the raw encoded data string"
       }, S.dataCopied ? "✓ Copied!" : "⎘ Copy Data")
     ));
   }
