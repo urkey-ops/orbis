@@ -1064,6 +1064,11 @@ function buildData(type, f) {
       let u = (f.url || "").trim();
       if (!u) return "";
       if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+      // RFC 3986 §3.2.2: scheme and host are case-insensitive.
+      // Uppercasing only those parts lets the DP use ALNUM mode (~5.5b/char)
+      // instead of BYTE mode (8b/char) for that prefix — saves ~40 bits per URL.
+      // Path/query/fragment are NOT touched — they can be case-sensitive.
+      u = u.replace(/^(https?:\/\/[^/?#]*)/i, m => m.toUpperCase());
       return u;
     }
     case "text":  return (f.text || "").slice(0, MAX_TEXT);
