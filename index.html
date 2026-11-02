@@ -887,8 +887,8 @@ function ensureJsQR() {
   return _jsqrP;
 }
 
-function drawGridForVerify(grid, mc, modSz) {
-  const qzMods = 4, offset = qzMods * modSz;
+function drawGridForVerify(grid, mc, modSz, hasMargin) {
+    const qzMods = hasMargin ? 4 : 0, offset = qzMods * modSz;
   const size = (mc + qzMods * 2) * modSz;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
@@ -901,10 +901,10 @@ function drawGridForVerify(grid, mc, modSz) {
   return canvas;
 }
 
-async function jsQRDecode(grid, mc) {
+async function jsQRDecode(grid, mc, hasMargin) {
   const jsQR = await ensureJsQR();
   for (const modSz of VERIFY_MOD_SIZES) {
-    const vc  = drawGridForVerify(grid, mc, modSz);
+    const vc  = drawGridForVerify(grid, mc, modSz, hasMargin)
     const ctx = vc.getContext("2d", { willReadFrequently: true });
     const id  = ctx.getImageData(0, 0, vc.width, vc.height);
     const res = jsQR(id.data, id.width, id.height, { inversionAttempts: "attemptBoth" });
@@ -931,11 +931,11 @@ function qrDataMatch(expected, decoded, type, ec) {
   return false;
 }
 
-async function runVerify(payload, grid, mc, type, ec, myToken) {
+  async function runVerify(payload, grid, mc, type, ec, myToken, hasMargin) {
   if (VERIFY_SKIP_TYPES.has(type)) { update({ verifyState: "off" }); return; }
   update({ verifyState: "checking" });
   try {
-    const decoded = await jsQRDecode(grid, mc);
+    const decoded = await jsQRDecode(grid, mc, hasMargin)
     if (myToken !== _verifyToken) return;
     const matched = decoded ? qrDataMatch(payload, decoded, type, ec) : false;
     update({ verifyState: matched ? "pass" : "fail" });
@@ -1202,7 +1202,7 @@ const QRC = (() => {
                _lastGrid: grid, _lastMc: mc });
 
       const verifyToken = ++_verifyToken;
-      runVerify(opts.payload, grid, mc, opts.type, opts.ecLevel, verifyToken);
+      runVerify(opts.payload, grid, mc, opts.type, opts.ecLevel, verifyToken, opts.hasMargin);
 
     } catch(e) {
       if (myToken !== _genToken) return;
