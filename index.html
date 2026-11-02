@@ -716,9 +716,6 @@ self.onmessage = function(e) {
 const QR_TYPES = [
   {id:"url",   label:"URL",   icon:"🔗"},
   {id:"text",  label:"Text",  icon:"📝"},
-  {id:"email", label:"Email", icon:"✉️"},
-  {id:"sms",   label:"SMS",   icon:"💬"},
-  {id:"phone", label:"Phone", icon:"📞"},
   {id:"wifi",  label:"WiFi",  icon:"📶"},
   {id:"vcard", label:"vCard", icon:"👤"},
 ];
@@ -729,12 +726,12 @@ const MAX_URL   = 2048;
 const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
 
-const VALID_FIELD_KEYS = new Set(["url","text","email","subject","body","phone","message","ssid","password","security","firstName","lastName","org","website","address"]);
+const VALID_FIELD_KEYS = new Set(["url","text","email","phone","ssid","password","security","firstName","lastName","org","website","address"]);
 const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT };
 const FIELD_DEFAULT_MAX = MAX_FIELD;
 const VALID_WIFI_SECURITY = new Set(["WPA","WPA2","WEP","None"]);
 const VERIFY_SKIP_TYPES      = new Set(["wifi"]);
-const VERIFY_NORMALIZE_TYPES = new Set(["email","sms","phone","vcard"]);
+const VERIFY_NORMALIZE_TYPES = new Set(["vcard"]);
 const VERIFY_MOD_SIZES = [16, 32, 64];
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1032,7 +1029,7 @@ function lsClear() {
 
 function validateFields(type, fields) {
   const errs = {};
-  if (type === "email" || type === "vcard") {
+  if (type === "vcard") {
     const e = (fields.email || "").trim();
     if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) errs.email = "Invalid email format";
   }
@@ -1072,12 +1069,6 @@ function buildData(type, f) {
       return u;
     }
     case "text":  return (f.text || "").slice(0, MAX_TEXT);
-    case "email": return `mailto:${(f.email||"").trim()}?subject=${encodeURIComponent((f.subject||"").slice(0,200))}&body=${encodeURIComponent((f.body||"").slice(0,1000))}`;
-    case "sms": {
-      const msg = (f.message != null && f.message !== "") ? `?body=${encodeURIComponent((f.message||"").slice(0,160))}` : "";
-      return `sms:${vcTel(f.phone)}${msg}`;
-    }
-    case "phone": return `tel:${vcTel(f.phone)}`;
     case "wifi": {
       const sec = VALID_WIFI_SECURITY.has(f.security) ? f.security : "WPA";
       return `WIFI:T:${sec === "None" ? "nopass" : sec};S:${wfEsc((f.ssid||"").slice(0,64))};P:${wfEsc((f.password||"").slice(0,64))};;`;
@@ -1621,18 +1612,7 @@ function renderForm(type, fields, fieldErrs) {
     case "text":
       container.appendChild(mkTextarea("text", "Text Content", "Any text, code, message…"));
       break;
-    case "email":
-      container.appendChild(mkInput("email", "Email", "you@example.com", "email"));
-      container.appendChild(mkInput("subject", "Subject", "Subject line"));
-      container.appendChild(mkTextarea("body", "Body", "Message…"));
-      break;
-    case "sms":
-      container.appendChild(mkInput("phone", "Phone Number", "+1 555 000 0000", "tel"));
-      container.appendChild(mkTextarea("message", "Message", "SMS body…"));
-      break;
-    case "phone":
-      container.appendChild(mkInput("phone", "Phone Number", "+1 555 000 0000", "tel"));
-      break;
+
     case "wifi":
       container.appendChild(mkInput("ssid", "Network SSID", "MyWiFiNetwork"));
       container.appendChild(mkInput("password", "Password", "WiFi password", "password"));
