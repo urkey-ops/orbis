@@ -5,13 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>QR_studio v17</title>
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'self';
-           script-src 'unsafe-inline' https://cdn.jsdelivr.net;
-           worker-src blob:;
-           style-src 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
-           font-src https://fonts.gstatic.com;
-           img-src 'self' data: blob:;
-           connect-src https://cdn.jsdelivr.net;">
+  content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap"/>
 <style>
@@ -727,7 +721,7 @@ const MAX_TEXT  = 2953;
 const MAX_FIELD = 500;
 
 const VALID_FIELD_KEYS = new Set(["url","text","email","phone","ssid","password","security","firstName","lastName","org","website","address"]);
-const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT };
+const FIELD_CAPS = { url: MAX_URL, text: MAX_TEXT, website: MAX_URL };
 const FIELD_DEFAULT_MAX = MAX_FIELD;
 const VALID_WIFI_SECURITY = new Set(["WPA","WPA2","WEP","None"]);
 const VERIFY_SKIP_TYPES      = new Set(["wifi"]);
@@ -880,7 +874,7 @@ function ensureJsQR() {
   if (_jsqrP) return _jsqrP;
   _jsqrP = new Promise((ok, fail) => {
     const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+    s.src = "vendor/jsQR.js";
     s.onload  = () => typeof window.jsQR === "function" ? ok(window.jsQR) : fail(new Error("jsQR missing"));
     s.onerror = () => fail(new Error("jsQR load failed"));
     document.head.appendChild(s);
@@ -1053,6 +1047,13 @@ function validateFields(type, fields) {
   if (type === "wifi" && !(fields.ssid || "").trim()) errs.ssid = "SSID required";
   if (type === "vcard" && !(fields.firstName || "").trim() && !(fields.lastName || "").trim())
     errs.firstName = "At least one name required";
+  const bytes = s => new TextEncoder().encode(s || "").length;
+  if (type === "text" && bytes(fields.text) > MAX_TEXT) errs.text = `Text too long (max ${MAX_TEXT} bytes)`;
+  if (type === "vcard") {
+    for (const k of ["firstName","lastName","org","address"])
+      if (bytes(fields[k]) > MAX_FIELD && !errs[k]) errs[k] = `Too long (max ${MAX_FIELD} bytes)`;
+    if (bytes(fields.website) > MAX_URL) errs.website = `Too long (max ${MAX_URL} bytes)`;
+  }
   return errs;
 }
 
