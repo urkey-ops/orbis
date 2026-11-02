@@ -1027,6 +1027,13 @@ function lsClear() {
   } catch { toast("Could not clear storage", "er"); }
 }
 
+  const SENSITIVE_KEYS = new Set(["password"]);
+function persistFields(type, fields) {
+  const out = {};
+  for (const k of Object.keys(fields)) if (!SENSITIVE_KEYS.has(k)) out[k] = fields[k];
+  lsSet("qrs_fields_" + type, out);
+}
+
 function validateFields(type, fields) {
   const errs = {};
   if (type === "vcard") {
@@ -1544,7 +1551,7 @@ function wireInput(inp, key, err, wrn) {
     const nf   = { ...S.fields, [key]: e.target.value };
     const errs = validateFields(S.qrType, nf);
     Object.assign(S, { fields: nf, fieldErrs: errs });
-    lsSet("qrs_fields_" + S.qrType, nf);
+    persistFields(S.qrType, nf);
 
     const msg = errs[key];
     inp.classList.toggle("err", !!msg);
@@ -1591,7 +1598,7 @@ function mkSelect(key, labelTxt, options) {
   sel.addEventListener("change", e => {
     const nf = { ...S.fields, [key]: e.target.value };
     Object.assign(S, { fields: nf });
-    lsSet("qrs_fields_" + S.qrType, nf);
+    persistFields(S.qrType, nf);
     scheduleQR(false);
   });
   const wrap = h("div", { class: "fld", "data-fld": key });
@@ -1790,10 +1797,20 @@ function renderPreview() {
   }
 }
 
+
+  
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 15 — BOOT
 ═══════════════════════════════════════════════════════════════════ */
-S.ecLevel   = lsGet("qrs_ec",     "M").data;
+(function purgeSavedSecrets(){
+  try {
+    const k = "qrs_fields_wifi", v = JSON.parse(localStorage.getItem(k) || "null");
+    if (v && typeof v === "object" && "password" in v) { delete v.password; localStorage.setItem(k, JSON.stringify(v)); }
+  } catch {}
+})();
+  
+  
+  S.ecLevel   = lsGet("qrs_ec",     "M").data;
 S.hasMargin = lsGet("qrs_margin", true).data;
 S.qrType    = (() => {
   const { data: t } = lsGet("qrs_type", null);
